@@ -1,0 +1,14 @@
+{
+  "name": "backroar-migration",
+  "private": true,
+  "workspaces": ["apps/api", "apps/web"],
+  "scripts": {
+    "dev:api": "npm run dev -w api",
+    "dev:web": "npm run dev -w web",
+    "migrations": "npm run migrations -w api",
+    "worker:image": "npm run worker:image -w api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

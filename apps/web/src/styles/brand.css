@@ -1,0 +1,259 @@
+/* Ported from backroarWebstieWIthBillingSystem/App/Views/base.twig (design tokens + nav) */
+:root {
+  --body-bg: #f5f5f5;
+  --brand-bg: #f5f5f5;
+  --brand-navbar: #1a1a1a;
+  --brand-footer: #1a1a1a;
+  --brand-heading: #88898a;
+  --brand-text: #1a1a1a;
+  --brand-primary: #88898a;
+  --brand-primary-hover: #c4c4c4;
+  --brand-accent: #0066ff;
+  --card-bg: #ffffff;
+  --card-bg-alt: #f5f5f5;
+  --card-border: #c4c4c4;
+  --brand-light: #f5f5f5;
+  --surface-0: #ffffff;
+  --surface-1: #f8fafc;
+  --surface-2: #f1f5f9;
+  --text-strong: #0f172a;
+  --text-soft: #475569;
+  --ring-soft: rgba(15, 23, 42, 0.14);
+  --border-soft: #e2e8f0;
+}
+
+body {
+  font-family: "Poppins", sans-serif;
+  color: var(--brand-text);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: var(--brand-bg);
+}
+
+/* Text fields: I-beam cursor; controls stay pointer (matches native expectation). */
+input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="image"]):not([type="hidden"]),
+textarea {
+  cursor: text;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+select {
+  cursor: pointer;
+}
+
+.storefront-main {
+  background: radial-gradient(circle at top, #ffffff 0%, #f8fafc 38%, #f3f4f6 100%);
+}
+
+/* Shared admin polish so all pages look consistent */
+.admin-shell {
+  background: radial-gradient(circle at top left, #f8fafc 0%, #eef2f7 36%, #f8fafc 100%);
+}
+
+.admin-content > *:not(.no-admin-card) {
+  border-radius: 14px;
+}
+
+.admin-content h1,
+.admin-content h2,
+.admin-content h3 {
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+
+.admin-content table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  background: var(--surface-0);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.admin-content th {
+  font-weight: 700;
+  color: #334155;
+  background: var(--surface-1);
+}
+
+.admin-content th,
+.admin-content td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.admin-content tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-content input,
+.admin-content select,
+.admin-content textarea {
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.admin-content input:focus,
+.admin-content select:focus,
+.admin-content textarea:focus {
+  border-color: #0f172a;
+  box-shadow: 0 0 0 3px var(--ring-soft);
+  outline: none;
+}
+
+.admin-content button {
+  border-radius: 10px;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
+}
+
+.admin-content button:hover {
+  transform: translateY(-1px);
+}
+
+.admin-content .rounded-xl,
+.admin-content .rounded-2xl {
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+@keyframes navFadeDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes navGlowDot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.3;
+  }
+}
+
+.nav-container {
+  animation: navFadeDown 0.4s ease-out;
+}
+
+.nav-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: #111827;
+  color: #f9fafb;
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.nav-chip span.dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #f9fafb;
+  animation: navGlowDot 2.4s ease-in-out infinite;
+}
+
+.nav-link {
+  position: relative;
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brand-text);
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  height: 1px;
+  width: 0;
+  background: #111827;
+  opacity: 0;
+  transition:
+    width 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.nav-link:hover {
+  color: #000000;
+  transform: translateY(-1px);
+}
+
+.nav-link:hover::after {
+  width: 100%;
+  opacity: 1;
+}
+
+.nav-input {
+  border-radius: 0.9rem;
+  border: 1px solid var(--card-border);
+  background: #f9fafb;
+  transition: all 0.2s ease;
+  font-size: 0.8rem;
+}
+
+.nav-input::placeholder {
+  color: #9ca3af;
+}
+
+.nav-input:focus {
+  background: #ffffff;
+  border-color: #111827;
+  box-shadow:
+    0 0 0 1px #111827,
+    0 0 0 3px rgba(15, 23, 42, 0.12);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.nav-cta {
+  border-radius: 0.9rem;
+  background: #111827;
+  color: #f9fafb;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: all 0.25s ease;
+}
+
+.nav-cta:hover {
+  background: #000000;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3);
+}
+
+.nav-user-btn {
+  border-radius: 0.9rem;
+  background: #f3f4f6;
+  color: #111827;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+.nav-user-btn:hover {
+  background: #e5e7eb;
+  transform: translateY(-1px);
+}

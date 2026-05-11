@@ -1,0 +1,33 @@
+{
+  "description": "Ordered MySQL schema/data files. Run against an empty database first, or expect idempotent errors on re-run.",
+  "files": [
+    "schema.sql",
+    "2025_12_13_multi_shop.sql",
+    "2025_12_13_pos_billing.sql",
+    "2025_12_13_pos_returns.sql",
+    "2025_12_13_returns.sql",
+    "2025_12_13_staff_counters_credit.sql",
+    "2025_12_13_users_role_staff.sql",
+    "2025_12_15_add_no_store_stock_to_products.sql",
+    "2025_12_15_add_store_id_to_products.sql",
+    "2025_12_15_history_of_trasfer.sql",
+    "2025_12_21_pos_cash_drawer.sql",
+    "2026_01_03_add_store_price_to_products.sql",
+    "2026_01_17_add_shop_id_to_users.sql",
+    "2026_01_17_add_variant_to_cart.sql",
+    "2026_01_17_add_variant_to_orders.sql",
+    "2026_01_17_attendance_system.sql",
+    "2026_01_17_product_variants.sql",
+    "2026_01_17_rbac_system.sql",
+    "2026_02_02_income_expense_tracker.sql",
+    "2026_02_07_add_has_variants_to_products.sql",
+    "2026_02_07_add_view_other_shops_permission.sql",
+    "2026_02_07_stock_management_enhancements.sql",
+    "2026_04_18_add_variant_id_to_product_images.sql",
+    "2026_04_19_add_variant_to_pos_order_items.sql",
+    "2026_04_25_add_hsn_code_to_products.sql",
+    "2026_add_max_discount_to_products.sql",
+    "couponsUpdate.sql",
+    "fix_attendance_checkout.sql"
+  ]
+}
