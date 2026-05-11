@@ -1589,7 +1589,7 @@ export async function registerAdminRoutes(app, { repos, rbacService }) {
   /* ---------- Income & expense ---------- */
   app.get("/api/admin/income-expense/overview", async (req, reply) => {
     if ((await requireStaffWithPermission(req, reply, rbacService, PERM.FINANCE_INCOME_EXPENSE)) == null) return;
-    const storeId = Math.floor(Number(req.query.store_id) || 1);
+    const storeId = Math.floor(Number(req.query.store_id) || 0);
     const date = String(req.query.date ?? "").slice(0, 10) || null;
     const ie = repos.incomeExpense;
     const d = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date().toISOString().slice(0, 10);
@@ -1669,7 +1669,7 @@ export async function registerAdminRoutes(app, { repos, rbacService }) {
 
   app.get("/api/admin/income-expense/reports", async (req, reply) => {
     if ((await requireStaffWithPermission(req, reply, rbacService, PERM.FINANCE_INCOME_EXPENSE)) == null) return;
-    const storeId = Math.floor(Number(req.query.store_id) || 1);
+    const storeId = Math.floor(Number(req.query.store_id) || 0);
     const dateFrom = String(req.query.date_from ?? "").slice(0, 10) || `${new Date().toISOString().slice(0, 7)}-01`;
     const dateTo = String(req.query.date_to ?? "").slice(0, 10) || new Date().toISOString().slice(0, 10);
     const ie = repos.incomeExpense;

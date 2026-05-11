@@ -58,13 +58,44 @@ export default function PosOrderDetailPage() {
   const addr = [order.store_address, order.store_city, order.store_state, order.store_pincode]
     .filter(Boolean)
     .join(", ");
+  const totalQty = items.reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0);
+  const visiblePayments = (payments || []).filter((p) => Number(p.amount) > 0);
+  const hasReturns = Number(net?.refund_total) > 0 || Number(net?.gst_return) > 0;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 print:max-w-none">
+    <div className="pos-bill-shell mx-auto max-w-3xl space-y-6 print:max-w-none">
       <style>{`
         @media print {
           .no-print { display: none !important; }
           body { background: white !important; }
+          .admin-shell > aside { display: none !important; }
+          .admin-workspace-banner { display: none !important; }
+          .admin-content {
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+          .pos-bill-shell {
+            width: 80mm !important;
+            max-width: 80mm !important;
+            margin: 0 auto !important;
+          }
+          .pos-bill-card {
+            border: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+          }
+          .pos-bill-table th,
+          .pos-bill-table td {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            font-size: 11px !important;
+          }
+          .pos-bill-meta,
+          .pos-bill-payments,
+          .pos-bill-summary {
+            font-size: 11px !important;
+          }
         }
       `}</style>
 
@@ -75,28 +106,30 @@ export default function PosOrderDetailPage() {
         <button
           type="button"
           onClick={() => window.print()}
-          className="text-sm px-4 py-2 rounded-lg bg-gray-900 text-white font-medium"
+          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white"
         >
-          Print
+          Print bill
         </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 print:border-0 print:shadow-none">
-        <header className="border-b border-gray-200 pb-4">
-          <h1 className="text-2xl font-black">{order.order_number}</h1>
-          <p className="text-sm text-gray-600">{fmtWhen(order.created_at)}</p>
-          {order.store_name && (
-            <div className="mt-3 text-sm text-gray-800">
-              <div className="font-semibold">{order.store_name}</div>
-              {addr && <div>{addr}</div>}
-              {order.store_gstin && <div className="text-xs text-gray-600">GSTIN: {order.store_gstin}</div>}
+      <div className="pos-bill-card space-y-4 rounded-xl border border-gray-200 bg-white p-6 print:border-0 print:shadow-none">
+        <header className="border-b border-dashed border-gray-300 pb-4 text-center">
+          {order.store_name ? (
+            <div className="text-sm text-gray-800">
+              <div className="text-lg font-black tracking-wide text-gray-900">{order.store_name}</div>
+              {addr ? <div className="mt-1 text-xs leading-relaxed text-gray-600">{addr}</div> : null}
+              {order.store_gstin ? <div className="mt-1 text-[11px] text-gray-600">GSTIN: {order.store_gstin}</div> : null}
             </div>
-          )}
+          ) : null}
+          <div className="mt-4 space-y-1">
+            <h1 className="text-xl font-black tracking-wide text-gray-900">{order.order_number}</h1>
+            <p className="text-xs text-gray-600">{fmtWhen(order.created_at)}</p>
+          </div>
         </header>
 
-        <section className="text-sm grid sm:grid-cols-2 gap-2">
+        <section className="pos-bill-meta grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            <span className="text-gray-500">Customer:</span> {order.customer_name || "—"}
+            <span className="text-gray-500">Customer:</span> {order.customer_name || "Walk-in customer"}
           </div>
           <div>
             <span className="text-gray-500">Phone:</span> {order.customer_phone || "—"}
@@ -107,44 +140,54 @@ export default function PosOrderDetailPage() {
           <div>
             <span className="text-gray-500">Sale type:</span> {order.sale_type || "Shop"}
           </div>
+          <div>
+            <span className="text-gray-500">Items:</span> {totalQty}
+          </div>
+          <div>
+            <span className="text-gray-500">Order id:</span> {order.id}
+          </div>
         </section>
 
-        <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-          <thead className="bg-gray-50">
+        <table className="pos-bill-table w-full border-b border-t border-dashed border-gray-300 text-sm">
+          <thead className="bg-gray-50/60">
             <tr>
-              <th className="text-left p-2">Item</th>
-              <th className="text-right p-2">Price</th>
-              <th className="text-right p-2">Qty</th>
-              <th className="text-right p-2">Line</th>
-              <th className="text-right p-2 print:hidden">Return</th>
+              <th className="py-2 text-left">Item</th>
+              <th className="py-2 text-right">Rate</th>
+              <th className="py-2 text-right">Qty</th>
+              <th className="py-2 text-right">Amount</th>
             </tr>
           </thead>
           <tbody>
             {items.map((it) => {
               const r = retMap?.[it.id];
               return (
-                <tr key={it.id} className="border-t border-gray-100">
-                  <td className="p-2">{it.product_name}</td>
-                  <td className="p-2 text-right">{fmtMoney(it.price)}</td>
-                  <td className="p-2 text-right">{it.quantity}</td>
-                  <td className="p-2 text-right">{fmtMoney(it.line_total)}</td>
-                  <td className="p-2 text-right text-xs text-gray-600 print:hidden">
-                    {r ? `${r.qty} qty · ${fmtMoney(r.refund)}` : "—"}
+                <tr key={it.id} className="align-top border-t border-dashed border-gray-200">
+                  <td className="py-2 pr-2">
+                    <div className="font-medium text-gray-900">{it.product_name}</div>
+                    <div className="mt-0.5 text-[11px] text-gray-500">
+                      GST {Number(it.gst_percent || 0).toFixed(0)}%
+                      {Number(it.discount_percent) > 0 ? ` · Disc ${Number(it.discount_percent).toFixed(0)}%` : ""}
+                      {r ? ` · Returned ${r.qty}` : ""}
+                    </div>
+                    {r ? <div className="text-[11px] text-amber-700">Refund {fmtMoney(r.refund)}</div> : null}
                   </td>
+                  <td className="py-2 text-right">{fmtMoney(it.price)}</td>
+                  <td className="py-2 text-right">{it.quantity}</td>
+                  <td className="py-2 text-right font-medium">{fmtMoney(it.line_total)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
 
-        <div className="space-y-1 text-sm max-w-xs ml-auto">
+        <div className="pos-bill-summary ml-auto max-w-xs space-y-1 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-600">Subtotal</span>
             <span>{fmtMoney(order.subtotal)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Discount</span>
-            <span>−{fmtMoney(order.discount_total)}</span>
+            <span>-{fmtMoney(order.discount_total)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">GST</span>
@@ -154,39 +197,39 @@ export default function PosOrderDetailPage() {
             <span className="text-gray-600">Service</span>
             <span>{fmtMoney(order.service_charge)}</span>
           </div>
-          <div className="flex justify-between font-bold border-t border-gray-200 pt-2">
-            <span>Grand</span>
+          <div className="flex justify-between border-t border-dashed border-gray-300 pt-2 text-base font-bold">
+            <span>Grand Total</span>
             <span>{fmtMoney(order.grand_total)}</span>
           </div>
-          {(net?.refund_total > 0 || net?.gst_return > 0) && (
+          {hasReturns ? (
             <>
-              <div className="flex justify-between text-amber-800 pt-2">
+              <div className="flex justify-between pt-2 text-amber-800">
                 <span>Refunds</span>
-                <span>−{fmtMoney(net.refund_total)}</span>
+                <span>-{fmtMoney(net.refund_total)}</span>
               </div>
               <div className="flex justify-between text-xs text-gray-600">
                 <span>Net after returns</span>
                 <span>{fmtMoney(net.grand_total)}</span>
               </div>
             </>
-          )}
+          ) : null}
         </div>
 
-        {payments?.length > 0 && (
-          <section>
-            <h2 className="font-bold text-gray-900 mb-2">Payments</h2>
-            <ul className="text-sm space-y-1">
-              {payments.map((p) => (
-                <li key={p.id} className="flex justify-between border-b border-gray-100 py-1">
+        {visiblePayments.length > 0 ? (
+          <section className="pos-bill-payments border-t border-dashed border-gray-300 pt-3">
+            <h2 className="mb-2 text-sm font-bold text-gray-900">Payments</h2>
+            <ul className="space-y-1 text-sm">
+              {visiblePayments.map((p) => (
+                <li key={p.id} className="flex justify-between">
                   <span>{p.method}</span>
                   <span>{fmtMoney(p.amount)}</span>
                 </li>
               ))}
             </ul>
           </section>
-        )}
+        ) : null}
 
-        <div className="text-sm text-gray-600 border-t border-gray-100 pt-3">
+        <div className="border-t border-dashed border-gray-300 pt-3 text-sm text-gray-600">
           <div className="flex justify-between">
             <span>Tendered</span>
             <span>{fmtMoney(order.tendered_amount)}</span>
@@ -194,6 +237,10 @@ export default function PosOrderDetailPage() {
           <div className="flex justify-between">
             <span>Change</span>
             <span>{fmtMoney(order.change_amount)}</span>
+          </div>
+          <div className="mt-3 border-t border-dashed border-gray-200 pt-3 text-center text-xs text-gray-500">
+            <div>Thank you for shopping with us.</div>
+            <div className="mt-1">Please keep this bill for exchange or return reference.</div>
           </div>
         </div>
       </div>

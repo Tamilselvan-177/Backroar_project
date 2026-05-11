@@ -171,7 +171,7 @@ export default function AdminOrderDetailPage() {
               <PaymentPill status={order.payment_status} />
             </div>
           </div>
-          <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-5 bg-slate-50/80">
+          <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-5 bg-slate-50/80">
             <div className="rounded-xl p-4 bg-gray-50 border border-slate-200">
               <div className="text-[0.75rem] uppercase tracking-[0.1em] text-gray-500 font-semibold mb-3">
                 Customer information
@@ -207,6 +207,27 @@ export default function AdminOrderDetailPage() {
                   <br />
                   <strong>{order.shipping_phone}</strong>
                 </p>
+              </div>
+            </div>
+            <div className="rounded-xl p-4 bg-gray-50 border border-slate-200">
+              <div className="text-[0.75rem] uppercase tracking-[0.1em] text-gray-500 font-semibold mb-3">
+                Fulfillment shop
+              </div>
+              <div className="space-y-2 text-sm text-gray-800">
+                <p className="font-semibold text-gray-900">{order.fulfillment_shop_label ?? "Shared / unassigned"}</p>
+                {Array.isArray(order.fulfillment_shops) && order.fulfillment_shops.length > 1 ? (
+                  <div className="space-y-1">
+                    {order.fulfillment_shops.map((shop, idx) => (
+                      <div key={`${shop.id ?? "shared"}-${idx}`} className="rounded-lg bg-white px-3 py-2 border border-slate-200">
+                        {shop.name}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    This is the shop currently mapped from the ordered product(s) for packing / delivery handling.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -259,6 +280,7 @@ export default function AdminOrderDetailPage() {
                               ) : null}
                             </div>
                             <div className="text-[11px] text-gray-500">Product #{line.product_id}</div>
+                            <div className="text-[11px] text-sky-700">Shop: {line.shop_name ?? "Shared / unassigned"}</div>
                           </div>
                         </div>
                       </td>

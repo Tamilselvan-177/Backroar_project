@@ -7,6 +7,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "migrations": "node src/scripts/ensureMongoIndexes.js",
+    "seed:demo": "node src/scripts/seedDemoCatalog.js",
     "worker:image": "node src/workers/imageUploadWorker.js"
   },
   "dependencies": {

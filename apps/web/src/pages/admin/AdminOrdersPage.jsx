@@ -121,8 +121,9 @@ export default function AdminOrdersPage() {
           </div>
         </header>
 
-        <p className="text-gray-600 text-sm mb-4 max-w-2xl print:hidden">
-          Search by order number, customer name, phone, user id, or order id — Mongo-backed.
+        <p className="text-gray-600 text-sm mb-4 max-w-3xl print:hidden">
+          Search by order number, customer name, phone, user id, or order id. Each row also shows which shop will
+          handle packing / fulfillment for that order.
         </p>
 
         <div className={`${adminCard} p-4 mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 print:hidden`}>
@@ -231,6 +232,7 @@ export default function AdminOrdersPage() {
                 <th className="p-3 whitespace-nowrap">Order</th>
                 <th className="p-3 whitespace-nowrap">Customer</th>
                 <th className="p-3 whitespace-nowrap">User</th>
+                <th className="p-3 whitespace-nowrap">Shop</th>
                 <th className="p-3 whitespace-nowrap">Items</th>
                 <th className="p-3 whitespace-nowrap">Total</th>
                 <th className="p-3 whitespace-nowrap">Order</th>
@@ -264,6 +266,12 @@ export default function AdminOrdersPage() {
                     ) : (
                       <>#{o.user_id}</>
                     )}
+                  </td>
+                  <td className="p-3 align-top text-xs text-gray-700">
+                    <div className="font-medium text-gray-900">{o.fulfillment_shop_label ?? "Shared / unassigned"}</div>
+                    {Array.isArray(o.fulfillment_shops) && o.fulfillment_shops.length > 1 ? (
+                      <div className="mt-0.5 text-[11px] text-gray-500">{o.fulfillment_shops.length} shops in this order</div>
+                    ) : null}
                   </td>
                   <td className="p-3 align-top">{o.item_count ?? 0}</td>
                   <td className="p-3 align-top font-semibold text-gray-900">

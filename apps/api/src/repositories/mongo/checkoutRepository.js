@@ -117,6 +117,84 @@ function escapeRegex(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizeShopId(raw) {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function productPrimaryImagePath(product) {
+  const rows = Array.isArray(product?.images) ? product.images : [];
+  const hit = rows.find((im) => im && !im.variant_id && im.image_path);
+  return hit?.image_path ?? "";
+}
+
+async function buildProductAndShopMaps(db, productIds) {
+  const ids = [...new Set((productIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0))];
+  if (ids.length === 0) {
+    return { pmap: new Map(), smap: new Map() };
+  }
+  const products = await db
+    .collection("products")
+    .find({ id: { $in: ids } })
+    .project({ id: 1, shop_id: 1, images: 1, variants: 1 })
+    .toArray();
+  const shopIds = [...new Set(products.map((p) => normalizeShopId(p?.shop_id)).filter(Boolean))];
+  const stores =
+    shopIds.length > 0
+      ? await db
+          .collection("stores")
+          .find({ id: { $in: shopIds } })
+          .project({ id: 1, name: 1 })
+          .toArray()
+      : [];
+  return {
+    pmap: new Map(products.map((p) => [Number(p.id), p])),
+    smap: new Map(stores.map((s) => [Number(s.id), String(s.name ?? `Shop #${s.id}`)])),
+  };
+}
+
+function enrichOrderItemsWithShop(items, pmap, smap) {
+  return (items || []).map((line) => {
+    const pid = Number(line?.product_id);
+    const product = pmap.get(pid);
+    const variant = findVariant(product, line?.variant_id);
+    const shopId = normalizeShopId(line?.shop_id) ?? normalizeShopId(product?.shop_id);
+    return {
+      ...line,
+      shop_id: shopId,
+      shop_name:
+        String(line?.shop_name ?? "").trim() || (shopId ? smap.get(shopId) ?? `Shop #${shopId}` : "Shared / unassigned"),
+      variant_name:
+        String(line?.variant_name ?? "").trim() ||
+        (variant?.variant_name != null && String(variant.variant_name).trim() ? String(variant.variant_name).trim() : null),
+      variant_image_path: line?.variant_image_path || variant?.image_path || "",
+      image_path: line?.image_path || productPrimaryImagePath(product) || "",
+    };
+  });
+}
+
+function fulfillmentShopsFromItems(items) {
+  const seen = new Map();
+  for (const line of items || []) {
+    const shopId = normalizeShopId(line?.shop_id);
+    const shopName = String(line?.shop_name ?? "").trim();
+    const key = shopId != null ? `id:${shopId}` : `name:${shopName || "shared"}`;
+    if (!seen.has(key)) {
+      seen.set(key, {
+        id: shopId,
+        name: shopName || "Shared / unassigned",
+      });
+    }
+  }
+  return [...seen.values()];
+}
+
+function fulfillmentShopLabel(shops) {
+  if (!shops?.length) return "Shared / unassigned";
+  if (shops.length === 1) return shops[0].name;
+  return `${shops[0].name} +${shops.length - 1} more`;
+}
+
 function adminOrderListFilter({ orderStatus, paymentStatus, q, dateFrom, dateTo } = {}) {
   const parts = [];
   const os = orderStatus != null ? String(orderStatus).trim() : "";
@@ -177,7 +255,7 @@ function serializeOrderDetail(o) {
 }
 
 export class MongoCheckoutRepository {
-  async placeOrder({ userId, shipping, couponCode: _couponCode }, { cart }) {
+  async placeOrder({ userId, shipping, couponCode: _couponCode }, { cart, coupons }) {
     const uid = Number(userId);
     const items = await cart.getCartItems(uid);
     if (!items.length) {
@@ -195,18 +273,37 @@ export class MongoCheckoutRepository {
     }
 
     const totals = computeCartTotals(items);
+    let couponApplied = { coupon: null, discount_amount: 0 };
+    if (_couponCode) {
+      const quote = await coupons.quoteForCheckout({
+        code: _couponCode,
+        userId: uid,
+        subtotal: totals.subtotal,
+      });
+      if (!quote?.ok) {
+        return { ok: false, error: quote?.error || "coupon_invalid", message: quote?.message || "Coupon is invalid." };
+      }
+      couponApplied = quote;
+    }
     const orderNumber = generateOrderNumber();
     const addr1 = String(shipping.address_line1 || "").trim();
     const addr2 = String(shipping.address_line2 || "").trim();
     const shippingAddress = addr2 ? `${addr1}, ${addr2}` : addr1;
 
     const orderItems = items.map((it) => {
+      const product = pmap.get(Number(it.product_id));
+      const variant = findVariant(product, it.variant_id);
       const price = Number(it.sale_price ?? it.price ?? 0);
       const q = Number(it.quantity ?? 0);
       return {
         product_id: Number(it.product_id),
         variant_id: it.variant_id != null && it.variant_id !== "" ? Number(it.variant_id) : null,
         product_name: String(it.product_name ?? ""),
+        variant_name:
+          variant?.variant_name != null && String(variant.variant_name).trim() ? String(variant.variant_name).trim() : null,
+        shop_id: normalizeShopId(product?.shop_id),
+        image_path: productPrimaryImagePath(product),
+        variant_image_path: variant?.image_path ?? "",
         price,
         quantity: q,
         subtotal: price * q,
@@ -222,10 +319,10 @@ export class MongoCheckoutRepository {
       user_id: uid,
       subtotal: totals.subtotal,
       shipping_charge: totals.shipping,
-      total_amount: totals.total,
-      discount_amount: 0,
-      coupon_id: null,
-      coupon_code: null,
+      total_amount: Math.max(0, totals.total - Number(couponApplied.discount_amount || 0)),
+      discount_amount: Number(couponApplied.discount_amount || 0),
+      coupon_id: couponApplied.coupon?.id ?? null,
+      coupon_code: couponApplied.coupon?.code ?? null,
       payment_method: "COD",
       payment_status: "Pending",
       order_status: "Pending",
@@ -276,7 +373,9 @@ export class MongoCheckoutRepository {
       order: {
         id: orderId,
         order_number: orderNumber,
-        total_amount: totals.total,
+        total_amount: orderDoc.total_amount,
+        discount_amount: orderDoc.discount_amount,
+        coupon_code: orderDoc.coupon_code,
         order_status: "Pending",
         payment_status: "Pending",
       },
@@ -347,18 +446,23 @@ export class MongoCheckoutRepository {
       col.find(filter).sort({ created_at: -1 }).skip((p - 1) * pp).limit(pp).toArray(),
     ]);
     const userIds = [...new Set(rows.map((r) => r.user_id).filter((id) => id != null))];
+    const productIds = rows.flatMap((r) => (Array.isArray(r?.items) ? r.items.map((it) => Number(it?.product_id)) : []));
     const db = getDb();
-    const users =
+    const [users, maps] = await Promise.all([
       userIds.length > 0
-        ? await db
+        ? db
             .collection("users")
             .find({ id: { $in: userIds.map(Number) } })
             .project({ id: 1, name: 1, email: 1 })
             .toArray()
-        : [];
+        : [],
+      buildProductAndShopMaps(db, productIds),
+    ]);
     const umap = new Map(users.map((u) => [u.id, u]));
     const orders = rows.map((o) => {
       const u = umap.get(Number(o.user_id));
+      const enrichedItems = enrichOrderItemsWithShop(o.items || [], maps.pmap, maps.smap);
+      const fulfillment_shops = fulfillmentShopsFromItems(enrichedItems);
       return {
         id: o.id,
         order_number: o.order_number,
@@ -370,6 +474,8 @@ export class MongoCheckoutRepository {
         order_status: o.order_status,
         payment_status: o.payment_status,
         item_count: (o.items || []).length,
+        fulfillment_shops,
+        fulfillment_shop_label: fulfillmentShopLabel(fulfillment_shops),
         created_at: o.created_at,
       };
     });
@@ -389,10 +495,22 @@ export class MongoCheckoutRepository {
     const o = await db.collection("orders").findOne({ id });
     if (!o) return null;
     const base = serializeOrderDetail(o);
-    const u = await db
-      .collection("users")
-      .findOne({ id: Number(o.user_id) }, { projection: { id: 1, name: 1, email: 1 } });
-    return { ...base, user: u ? { id: u.id, name: u.name, email: u.email } : null };
+    const [u, maps] = await Promise.all([
+      db.collection("users").findOne({ id: Number(o.user_id) }, { projection: { id: 1, name: 1, email: 1 } }),
+      buildProductAndShopMaps(
+        db,
+        Array.isArray(o?.items) ? o.items.map((it) => Number(it?.product_id)) : []
+      ),
+    ]);
+    const items = enrichOrderItemsWithShop(base.items || [], maps.pmap, maps.smap);
+    const fulfillment_shops = fulfillmentShopsFromItems(items);
+    return {
+      ...base,
+      items,
+      fulfillment_shops,
+      fulfillment_shop_label: fulfillmentShopLabel(fulfillment_shops),
+      user: u ? { id: u.id, name: u.name, email: u.email } : null,
+    };
   }
 
   async updateOrderAdmin(orderId, patch) {

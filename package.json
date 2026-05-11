@@ -6,6 +6,7 @@
     "dev:api": "npm run dev -w api",
     "dev:web": "npm run dev -w web",
     "migrations": "npm run migrations -w api",
+    "seed:demo": "npm run seed:demo -w api",
     "worker:image": "npm run worker:image -w api"
   },
   "engines": {

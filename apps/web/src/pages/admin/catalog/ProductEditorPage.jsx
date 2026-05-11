@@ -172,7 +172,6 @@ export default function ProductEditorPage() {
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState(() => initialProductForm());
-  const [discountAmountDraft, setDiscountAmountDraft] = useState("");
   /** ₹ helper inputs per variant row index (not persisted). */
   const [variantDiscountAmountDraft, setVariantDiscountAmountDraft] = useState({});
   const [variants, setVariants] = useState([emptyVariant()]);
@@ -195,7 +194,6 @@ export default function ProductEditorPage() {
   const [quickAdd, setQuickAdd] = useState(null);
 
   function applyLoadedProduct(p) {
-    setDiscountAmountDraft("");
     setVariantDiscountAmountDraft({});
     setForm({
       name: p.name ?? "",
@@ -224,7 +222,21 @@ export default function ProductEditorPage() {
       meta_description: p.meta_description ?? "",
       shop_id: p.shop_id != null ? String(p.shop_id) : "",
     });
-    const vlist = Array.isArray(p.variants) && p.variants.length ? p.variants : [emptyVariant()];
+    const vlist =
+      Array.isArray(p.variants) && p.variants.length
+        ? p.variants
+        : [
+            {
+              ...emptyVariant(),
+              quantity: p.stock_quantity != null && p.stock_quantity !== "" ? String(p.stock_quantity) : "",
+              price: p.price != null && p.price !== "" ? String(p.price) : "",
+              sale_price: p.sale_price != null && p.sale_price !== "" ? String(p.sale_price) : "",
+              cost_price: p.cost_price != null && p.cost_price !== "" ? String(p.cost_price) : "",
+              gst_percent: p.gst_percent != null && p.gst_percent !== "" ? String(p.gst_percent) : "",
+              max_discount_percent:
+                p.max_discount_percent != null && p.max_discount_percent !== "" ? String(p.max_discount_percent) : "",
+            },
+          ];
     setVariants(
       vlist.map((v) => ({
         id: v.id ?? null,
@@ -330,7 +342,6 @@ export default function ProductEditorPage() {
     if (!/\/admin\/products\/create\/?$/.test(location.pathname)) return;
     setForm(initialProductForm());
     setVariants([emptyVariant()]);
-    setDiscountAmountDraft("");
     setVariantDiscountAmountDraft({});
     setGalleryPreview([]);
     setErr(null);
@@ -665,6 +676,7 @@ export default function ProductEditorPage() {
     const category_id = Number(form.category_id);
     const namedVariantRows = variants.filter((v) => String(v.variant_name ?? "").trim());
     const lockProductStock = namedVariantRows.length > 0;
+    const singleVariantRow = variants[0] ?? emptyVariant();
     const refVariant = namedVariantRows[0];
     const mrps = namedVariantRows.map((v) => Number(v.price) || 0);
     const payload = {
@@ -687,28 +699,28 @@ export default function ProductEditorPage() {
         ? mrps.length
           ? Math.min(...mrps)
           : 0
-        : Number(form.price),
+        : Number(singleVariantRow.price),
       sale_price: lockProductStock
         ? namedVariantRows.length === 1 && refVariant?.sale_price !== ""
           ? Number(refVariant.sale_price)
           : null
-        : form.sale_price === ""
+        : singleVariantRow.sale_price === ""
           ? null
-          : Number(form.sale_price),
+          : Number(singleVariantRow.sale_price),
       cost_price: lockProductStock
         ? namedVariantRows.length === 1 && refVariant?.cost_price !== ""
           ? Number(refVariant.cost_price)
           : null
-        : form.cost_price === ""
+        : singleVariantRow.cost_price === ""
           ? null
-          : Number(form.cost_price),
+          : Number(singleVariantRow.cost_price),
       is_active: form.is_active,
       is_featured: form.is_featured,
       meta_title: form.meta_title.trim(),
       meta_description: form.meta_description.trim(),
       gst_percent: lockProductStock
         ? Math.max(0, Number(refVariant?.gst_percent) || 0)
-        : Math.max(0, Number(form.gst_percent) || 0),
+        : Math.max(0, Number(singleVariantRow.gst_percent) || 0),
       max_discount_percent: lockProductStock
         ? refVariant?.max_discount_percent === "" || refVariant?.max_discount_percent == null
           ? null
@@ -716,10 +728,10 @@ export default function ProductEditorPage() {
               const n = Number(refVariant.max_discount_percent);
               return Number.isFinite(n) ? n : null;
             })()
-        : form.max_discount_percent === "" || form.max_discount_percent == null
+        : singleVariantRow.max_discount_percent === "" || singleVariantRow.max_discount_percent == null
           ? null
           : (() => {
-              const n = Number(form.max_discount_percent);
+              const n = Number(singleVariantRow.max_discount_percent);
               return Number.isFinite(n) ? n : null;
             })(),
       hsn_code: form.hsn_code.trim() ? form.hsn_code.trim().slice(0, 20) : null,
@@ -753,28 +765,14 @@ export default function ProductEditorPage() {
       payload.shop_id = form.shop_id === "" ? null : Number(form.shop_id);
     }
     if (!lockProductStock) {
-      payload.stock_quantity = Number(form.stock_quantity) || 0;
+      payload.stock_quantity = Number(singleVariantRow.quantity) || 0;
     }
     return payload;
   }
 
-  useEffect(() => {
-    const hasNamedVariant = variants.some((v) => String(v.variant_name ?? "").trim());
-    if (hasNamedVariant) return;
-    const d = discountAmountDraft.trim();
-    if (!d) return;
-    const base = baseSellingPrice(form.price, form.sale_price);
-    const amount = parseFloat(d);
-    if (base <= 0 || !Number.isFinite(amount) || amount <= 0) return;
-    const pct = Math.max(0, Math.min(100, (amount / base) * 100));
-    const next = pct.toFixed(2);
-    setForm((f) => (f.max_discount_percent === next ? f : { ...f, max_discount_percent: next }));
-  }, [variants, form.price, form.sale_price, discountAmountDraft]);
-
   function resetAfterCreateAnother() {
     setForm(initialProductForm());
     setVariants([emptyVariant()]);
-    setDiscountAmountDraft("");
     setVariantDiscountAmountDraft({});
     setGalleryPreview([]);
     setErr(null);
@@ -915,34 +913,6 @@ export default function ProductEditorPage() {
 
   const namedVariantRows = variants.filter((v) => String(v.variant_name ?? "").trim());
   const lockProductStock = namedVariantRows.length > 0;
-  const computedVariantStockSum = namedVariantRows.reduce((s, v) => {
-    const q = v.quantity === "" ? 0 : Number(v.quantity);
-    return s + (Number.isFinite(q) ? Math.max(0, Math.floor(q)) : 0);
-  }, 0);
-
-  const profitPreview = useMemo(() => {
-    const hasNamedVariant = variants.some((v) => String(v.variant_name ?? "").trim());
-    if (hasNamedVariant) return null;
-    const mrp = parseFloat(String(form.price ?? "")) || 0;
-    const sale = parseFloat(String(form.sale_price ?? "")) || 0;
-    const selling = sale > 0 && sale < mrp ? sale : mrp;
-    const costRaw = parseFloat(String(form.cost_price ?? ""));
-    const cost = Number.isFinite(costRaw) ? Math.max(0, costRaw) : 0;
-    const hasCostField = String(form.cost_price ?? "").trim() !== "";
-    const hasSelling = selling > 0;
-    if (!hasSelling && !hasCostField) return null;
-    const grossPerUnit = hasSelling ? selling - cost : null;
-    const marginPct = grossPerUnit != null && selling > 0 ? (grossPerUnit / selling) * 100 : null;
-    return {
-      selling,
-      cost,
-      grossPerUnit,
-      marginPct,
-      hasSelling,
-      hasCostField,
-      usesSalePrice: sale > 0 && sale < mrp,
-    };
-  }, [variants, form.price, form.sale_price, form.cost_price]);
 
   const galleryOnlyImages = useMemo(
     () =>
@@ -1299,87 +1269,18 @@ export default function ProductEditorPage() {
                 </div>
               ) : null}
 
-              {!lockProductStock ? (
-                <>
-                  <label className="block">
-                    <span className={lbl}>MRP *</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className={inp}
-                      required
-                      value={form.price}
-                      onChange={(e) => setField("price", e.target.value)}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className={lbl}>Sale price</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className={inp}
-                      value={form.sale_price}
-                      onChange={(e) => setField("sale_price", e.target.value)}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className={lbl}>Max discount %</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.01"
-                      className={inp}
-                      value={form.max_discount_percent}
-                      onChange={(e) => {
-                        const pct = e.target.value;
-                        setField("max_discount_percent", pct);
-                        const base = baseSellingPrice(form.price, form.sale_price);
-                        const p = parseFloat(pct);
-                        if (base > 0 && Number.isFinite(p) && p >= 0) {
-                          setDiscountAmountDraft(((base * p) / 100).toFixed(2));
-                        }
-                      }}
-                      placeholder="e.g. 10"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className={lbl}>Max discount ₹ (helper)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className={inp}
-                      value={discountAmountDraft}
-                      onChange={(e) => setDiscountAmountDraft(e.target.value)}
-                      placeholder="Syncs % from MRP / sale"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className={lbl}>GST %</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={28}
-                      step="0.01"
-                      className={inp}
-                      value={form.gst_percent}
-                      onChange={(e) => setField("gst_percent", e.target.value)}
-                    />
-                  </label>
-                </>
-              ) : (
-                <div className="md:col-span-4 rounded-xl border border-amber-100 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
-                  <p className="font-semibold text-amber-900">Variant pricing</p>
-                  <p className="mt-1 text-xs text-amber-900/85 leading-snug">
-                    This product has named variants. Set <strong>MRP</strong>, <strong>sale price</strong>, <strong>max discount</strong>,{" "}
-                    <strong>GST %</strong>, and <strong>cost</strong> on each variant row below (not here).
-                  </p>
-                </div>
-              )}
+              <div className="md:col-span-4 rounded-xl border border-amber-100 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+                <p className="font-semibold text-amber-900">Pricing lives in Variants</p>
+                <p className="mt-1 text-xs text-amber-900/85 leading-snug">
+                  Keep MRP, sale price, discount, GST, cost, and stock inside the <strong>Variants</strong> section
+                  below. Use the first row for a single product, or add named rows for multi-option products.{" "}
+                  <strong>Product SKU</strong> stays here.
+                </p>
+              </div>
+              <label className="block">
+                <span className={lbl}>Product SKU</span>
+                <input className={inp} value={form.sku} onChange={(e) => setField("sku", e.target.value)} />
+              </label>
               <label className="block">
                 <span className={lbl}>HSN code</span>
                 <input
@@ -1390,92 +1291,6 @@ export default function ProductEditorPage() {
                   placeholder="e.g. 4202"
                 />
               </label>
-              <label className="block">
-                <span className={lbl}>
-                  Stock qty {lockProductStock ? <span className="normal-case font-normal text-slate-400">(auto)</span> : null}
-                </span>
-                {lockProductStock ? (
-                  <>
-                    <input type="number" readOnly className={`${inp} cursor-not-allowed bg-slate-50`} value={computedVariantStockSum} />
-                    <p className="mt-1 text-[10px] text-slate-500">Sum of variant quantities — edit each variant row below.</p>
-                  </>
-                ) : (
-                  <input
-                    type="number"
-                    min={0}
-                    className={inp}
-                    value={form.stock_quantity}
-                    onChange={(e) => setField("stock_quantity", e.target.value)}
-                  />
-                )}
-              </label>
-
-              <label className="block md:col-span-2">
-                <span className={lbl}>Product SKU</span>
-                <input className={inp} value={form.sku} onChange={(e) => setField("sku", e.target.value)} />
-              </label>
-              {!lockProductStock ? (
-                <>
-                  <label className="block md:col-span-2">
-                    <span className={lbl}>Cost price</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className={inp}
-                      value={form.cost_price}
-                      onChange={(e) => setField("cost_price", e.target.value)}
-                    />
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      Drives the profit preview below: gross profit per unit vs MRP/sale (before GST and fixed costs).
-                    </p>
-                  </label>
-
-                  {profitPreview ? (
-                    <div className="md:col-span-4 rounded-xl border border-emerald-100 bg-emerald-50/80 px-4 py-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-900">Profit preview</p>
-                      <p className="mt-1 text-[11px] text-emerald-800/90">
-                        Estimates unit economics from MRP / sale price vs cost (does not subtract operating expenses).
-                      </p>
-                      <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        <div className="rounded-lg bg-white/80 px-3 py-2 shadow-sm">
-                          <dt className="text-[10px] font-semibold uppercase text-slate-500">Selling (unit)</dt>
-                          <dd className="text-lg font-bold text-slate-900">{fmtInr(profitPreview.selling)}</dd>
-                          <dd className="text-[10px] text-slate-500">
-                            {profitPreview.usesSalePrice ? "Uses sale price (< MRP)" : "Uses MRP"}
-                          </dd>
-                        </div>
-                        <div className="rounded-lg bg-white/80 px-3 py-2 shadow-sm">
-                          <dt className="text-[10px] font-semibold uppercase text-slate-500">Cost (unit)</dt>
-                          <dd className="text-lg font-bold text-slate-900">
-                            {profitPreview.hasCostField ? fmtInr(profitPreview.cost) : "—"}
-                          </dd>
-                        </div>
-                        <div className="rounded-lg bg-white/80 px-3 py-2 shadow-sm">
-                          <dt className="text-[10px] font-semibold uppercase text-slate-500">Gross profit (unit)</dt>
-                          <dd
-                            className={`text-lg font-bold ${(profitPreview.grossPerUnit ?? 0) >= 0 ? "text-emerald-800" : "text-red-700"}`}
-                          >
-                            {profitPreview.hasSelling && profitPreview.hasCostField
-                              ? fmtInr(profitPreview.grossPerUnit ?? 0)
-                              : "—"}
-                          </dd>
-                          <dd className="text-[10px] text-slate-500">Selling minus cost (COGS)</dd>
-                        </div>
-                        <div className="rounded-lg bg-white/80 px-3 py-2 shadow-sm">
-                          <dt className="text-[10px] font-semibold uppercase text-slate-500">Margin</dt>
-                          <dd className="text-lg font-bold text-slate-900">
-                            {profitPreview.marginPct != null && profitPreview.hasSelling && profitPreview.hasCostField
-                              ? `${profitPreview.marginPct.toFixed(1)}%`
-                              : "—"}
-                          </dd>
-                          <dd className="text-[10px] text-slate-500">Gross ÷ selling</dd>
-                        </div>
-                      </dl>
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-6 border-t border-slate-100 pt-4">
@@ -1595,8 +1410,9 @@ export default function ProductEditorPage() {
             <div>
               <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">Variants</h2>
               <p className="mt-1 max-w-2xl text-xs text-slate-500">
-                Variant image files are stored separately from the product gallery (tagged to this variant). Use{" "}
-                <span className="font-medium text-slate-700">Clear variant image</span> to remove URL + uploads.
+                Use the first row below for single-product pricing and stock. Add a variant name only for real options
+                like size, color, or storage. Variant image files are stored separately from the product gallery
+                (tagged to this variant).
               </p>
             </div>
             <button
@@ -1636,6 +1452,9 @@ export default function ProductEditorPage() {
                 : [];
             const hasVariantImage =
               variantUploadRows.length > 0 || String(v.image_path ?? "").trim().length > 0;
+            const hasVariantName = String(v.variant_name ?? "").trim().length > 0;
+            const isSingleProductRow = !lockProductStock && i === 0;
+            const showVariantPricing = hasVariantName || isSingleProductRow;
             return (
               <div key={i} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
                 <div className="flex justify-between gap-2">
@@ -1648,13 +1467,20 @@ export default function ProductEditorPage() {
                 </div>
                 <input
                   className={inp}
-                  placeholder="Variant name (e.g. Red, 128GB Black)"
+                  placeholder={isSingleProductRow ? "Leave blank for single product, or enter a real variant name" : "Variant name (e.g. Red, 128GB Black)"}
                   value={v.variant_name}
                   onChange={(e) => setVariant(i, { variant_name: e.target.value })}
                 />
-                {String(v.variant_name ?? "").trim() ? (
+                {isSingleProductRow ? (
+                  <p className="text-[11px] text-slate-500">
+                    Keep this name empty for a single product. Fill it only when the product truly has options.
+                  </p>
+                ) : null}
+                {showVariantPricing ? (
                   <div className="space-y-3 rounded-lg border border-slate-200 bg-white/80 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Pricing (this variant)</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      {hasVariantName ? "Pricing (this variant)" : "Pricing (single product)"}
+                    </p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       <label className="block">
                         <span className={lbl}>MRP *</span>
@@ -1778,31 +1604,37 @@ export default function ProductEditorPage() {
                     })()}
                   </div>
                 ) : null}
+                {hasVariantName ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className={lbl}>Attribute (e.g. Colour)</span>
+                      <input
+                        className={inp}
+                        placeholder="Colour"
+                        value={v.attribute_name}
+                        onChange={(e) => setVariant(i, { attribute_name: e.target.value })}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className={lbl}>Attribute value</span>
+                      <input
+                        className={inp}
+                        placeholder="Red"
+                        value={v.attribute_value}
+                        onChange={(e) => setVariant(i, { attribute_value: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className={lbl}>Attribute (e.g. Colour)</span>
-                    <input
-                      className={inp}
-                      placeholder="Colour"
-                      value={v.attribute_name}
-                      onChange={(e) => setVariant(i, { attribute_name: e.target.value })}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className={lbl}>Attribute value</span>
-                    <input
-                      className={inp}
-                      placeholder="Red"
-                      value={v.attribute_value}
-                      onChange={(e) => setVariant(i, { attribute_value: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className={lbl}>Variant SKU</span>
-                    <input className={inp} placeholder="Optional" value={v.sku} onChange={(e) => setVariant(i, { sku: e.target.value })} />
-                  </label>
+                  {hasVariantName ? (
+                    <label className="block">
+                      <span className={lbl}>Variant SKU</span>
+                      <input className={inp} placeholder="Optional" value={v.sku} onChange={(e) => setVariant(i, { sku: e.target.value })} />
+                    </label>
+                  ) : (
+                    <div />
+                  )}
                   <label className="block">
                     <span className={lbl}>Barcode (POS / label)</span>
                     <input

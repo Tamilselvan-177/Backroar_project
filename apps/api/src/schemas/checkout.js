@@ -20,6 +20,9 @@ export const checkoutShippingSchema = z.object({
 
 export const checkoutBodySchema = z.object({
   shipping: checkoutShippingSchema,
-  /** Reserved for coupon phase; ignored at checkout for now. */
   couponCode: z.string().max(64).optional(),
+});
+
+export const checkoutCouponPreviewSchema = z.object({
+  couponCode: trimmed.pipe(z.string().min(1).max(64)),
 });

@@ -202,8 +202,8 @@ export default function AdminLayout() {
 
   return (
     <AdminPermProvider ready={perm.ready} isAdmin={perm.isAdmin} keys={perm.keys} catalogScope={perm.catalogScope}>
-      <div className="admin-shell min-h-screen bg-neutral-50 flex flex-col md:flex-row text-gray-900">
-        <aside className="w-full md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-gray-200 bg-white/95 backdrop-blur p-4 md:p-5 space-y-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto">
+      <div className="admin-shell min-h-screen bg-neutral-50 flex flex-col md:flex-row text-gray-900 print:block print:min-h-0 print:bg-white">
+        <aside className="w-full md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-gray-200 bg-white/95 backdrop-blur p-4 md:p-5 space-y-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto print:hidden">
           <div className="pb-3 border-b border-gray-100">
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">Control center</div>
             <div className="font-semibold text-lg tracking-tight text-gray-900 mt-1">Backroar Admin</div>
@@ -213,8 +213,8 @@ export default function AdminLayout() {
             ← Storefront
           </Link>
         </aside>
-        <main className="admin-content flex-1 p-4 md:p-8 overflow-x-auto">
-          <div className="mb-5 rounded-xl border border-gray-200 bg-white/80 px-4 py-3 shadow-sm">
+        <main className="admin-content flex-1 p-4 md:p-8 overflow-x-auto print:p-0 print:overflow-visible">
+          <div className="admin-workspace-banner mb-5 rounded-xl border border-gray-200 bg-white/80 px-4 py-3 shadow-sm print:hidden">
             <div className="text-[11px] uppercase tracking-[0.14em] text-gray-500 font-semibold">Workspace</div>
             <div className="text-lg font-semibold text-gray-900">Manage operations, catalog, POS and finance</div>
           </div>

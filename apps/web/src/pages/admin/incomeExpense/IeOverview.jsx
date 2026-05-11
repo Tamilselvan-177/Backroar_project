@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiJson } from "../../../api/client.js";
-
-function fmt(n) {
-  return `₹${(Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
+import { fmtDateTime, fmtMoney, inputCls, labelCls, sectionCard, statTone } from "./ui.js";
 
 export default function IeOverview() {
   const [stores, setStores] = useState([]);
-  const [storeId, setStoreId] = useState(1);
+  const [storeId, setStoreId] = useState(0);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
 
   const load = useCallback(() => {
     setErr(null);
-    const qs = new URLSearchParams({ store_id: String(storeId), date });
+    const qs = new URLSearchParams({ date });
+    if (storeId > 0) qs.set("store_id", String(storeId));
     apiJson(`/api/admin/income-expense/overview?${qs}`)
       .then((d) => {
         setData(d);
@@ -27,86 +25,150 @@ export default function IeOverview() {
     load();
   }, [load]);
 
-  if (err) return <p className="text-red-600">{err}</p>;
-  if (!data) return <p className="text-gray-600">Loading…</p>;
+  if (err) return <p className="text-sm text-red-600">{err}</p>;
+  if (!data) return <p className="text-sm text-slate-600">Loading…</p>;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-3 items-end">
-        <label className="text-sm">
-          Store
-          <select
-            className="ml-2 border rounded-lg px-2 py-1"
-            value={storeId}
-            onChange={(e) => setStoreId(Number(e.target.value))}
-          >
-            {(stores.length ? stores : [{ id: 1, name: "Default" }]).map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          Date
-          <input
-            type="date"
-            className="ml-2 border rounded-lg px-2 py-1"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </label>
-      </div>
-
-      <div className="grid sm:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-xs font-bold text-gray-500 uppercase">Daily income</p>
-          <p className="text-xl font-black mt-1">{fmt(data.daily_income)}</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-xs font-bold text-gray-500 uppercase">Daily expense</p>
-          <p className="text-xl font-black mt-1">{fmt(data.daily_expense)}</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-xs font-bold text-gray-500 uppercase">Daily profit</p>
-          <p className="text-xl font-black mt-1">{fmt(data.daily_profit)}</p>
+      <div className={`${sectionCard} p-4 md:p-5`}>
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_220px] md:items-end">
+          <div>
+            <p className={labelCls}>Finance Snapshot</p>
+            <h2 className="mt-1 text-lg font-bold text-slate-950">Daily and monthly business health</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Review cash flow for a store or all stores together, then drill into recent expenses and income activity.
+            </p>
+          </div>
+          <label className="block text-sm">
+            <span className={labelCls}>Store</span>
+            <select className={inputCls} value={storeId} onChange={(e) => setStoreId(Number(e.target.value))}>
+              <option value={0}>All stores</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className={labelCls}>Business Date</span>
+            <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="font-bold mb-2">Month income</p>
-          <p className="text-lg">{fmt(data.monthly_income)}</p>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className={`${sectionCard} p-5`}>
+          <p className={labelCls}>Daily Income</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{fmtMoney(data.daily_income)}</p>
+          <p className="mt-1 text-xs text-slate-500">Sales and posted income entries for the day</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="font-bold mb-2">Month expense</p>
-          <p className="text-lg">{fmt(data.monthly_expense)}</p>
-          <p className="text-sm text-gray-600 mt-1">Net {fmt(data.monthly_profit)}</p>
+        <div className={`${sectionCard} p-5`}>
+          <p className={labelCls}>Daily Expense</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{fmtMoney(data.daily_expense)}</p>
+          <p className="mt-1 text-xs text-slate-500">Recorded operating cost for the day</p>
+        </div>
+        <div className={`${sectionCard} p-5`}>
+          <p className={labelCls}>Daily Profit</p>
+          <p className={`mt-2 text-2xl font-black ${statTone(data.daily_profit)}`}>{fmtMoney(data.daily_profit)}</p>
+          <p className="mt-1 text-xs text-slate-500">Income minus expenses</p>
+        </div>
+        <div className={`${sectionCard} p-5`}>
+          <p className={labelCls}>Monthly Income</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{fmtMoney(data.monthly_income)}</p>
+          <p className="mt-1 text-xs text-slate-500">Accumulated income this month</p>
+        </div>
+        <div className={`${sectionCard} p-5`}>
+          <p className={labelCls}>Monthly Profit</p>
+          <p className={`mt-2 text-2xl font-black ${statTone(data.monthly_profit)}`}>{fmtMoney(data.monthly_profit)}</p>
+          <p className="mt-1 text-xs text-slate-500">Current net result for the month</p>
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <div>
-          <p className="font-bold mb-2">Recent expenses</p>
-          <ul className="text-sm space-y-1 border rounded-lg p-3 bg-gray-50">
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className={`${sectionCard} p-5`}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className={labelCls}>Recent Expenses</p>
+              <h3 className="mt-1 text-base font-bold text-slate-950">Latest spending entries</h3>
+            </div>
+            <div className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+              {data.recent_expenses?.length ?? 0} entries
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
             {(data.recent_expenses ?? []).map((e) => (
-              <li key={e.id}>
-                {e.description} — {fmt(e.amount)}
-              </li>
+              <div key={e.id} className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900">{e.description}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {e.category_name || "Uncategorized"}
+                      {e.store_name ? ` · ${e.store_name}` : ""}
+                    </p>
+                  </div>
+                  <p className="font-bold text-rose-700">{fmtMoney(e.amount)}</p>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">{fmtDateTime(e.created_at)}</p>
+              </div>
             ))}
-            {!data.recent_expenses?.length ? <li className="text-gray-500">None</li> : null}
-          </ul>
+            {!data.recent_expenses?.length ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                No expense entries for this date.
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div>
-          <p className="font-bold mb-2">Recent income</p>
-          <ul className="text-sm space-y-1 border rounded-lg p-3 bg-gray-50">
+
+        <div className={`${sectionCard} p-5`}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className={labelCls}>Recent Income</p>
+              <h3 className="mt-1 text-base font-bold text-slate-950">Latest credited records</h3>
+            </div>
+            <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              {data.recent_income?.length ?? 0} entries
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
             {(data.recent_income ?? []).map((e) => (
-              <li key={e.id}>
-                {e.description ?? e.source_type} — {fmt(e.amount)}
-              </li>
+              <div key={e.id} className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900">{e.description ?? e.source_type}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {e.source_type || "Income"}
+                      {e.store_name ? ` · ${e.store_name}` : ""}
+                    </p>
+                  </div>
+                  <p className={`font-bold ${Number(e.amount) < 0 ? "text-red-700" : "text-emerald-700"}`}>
+                    {fmtMoney(e.amount)}
+                  </p>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">{fmtDateTime(e.created_at)}</p>
+              </div>
             ))}
-            {!data.recent_income?.length ? <li className="text-gray-500">None</li> : null}
-          </ul>
+            {!data.recent_income?.length ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                No income activity for this date.
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className={`${sectionCard} p-5`}>
+          <p className={labelCls}>Monthly Expense</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{fmtMoney(data.monthly_expense)}</p>
+          <p className="mt-2 text-sm text-slate-600">Use this with reports to understand category-heavy operating cost.</p>
+        </div>
+        <div className={`${sectionCard} p-5`}>
+          <p className={labelCls}>Operational Note</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Finance dates are stored in UTC. If you post entries late at night, keep your business date selection in mind
+            while reviewing day-end numbers.
+          </p>
         </div>
       </div>
     </div>

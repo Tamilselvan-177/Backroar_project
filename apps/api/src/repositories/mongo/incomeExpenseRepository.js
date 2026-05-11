@@ -140,7 +140,14 @@ export class MongoIncomeExpenseRepository {
     const catIds = [...new Set(rows.map((r) => r.category_id).filter(Boolean))];
     const cats = catIds.length ? await getDb().collection("expense_categories").find({ id: { $in: catIds } }).toArray() : [];
     const cmap = new Map(cats.map((c) => [c.id, c.name]));
-    return rows.map((r) => ({ ...r, category_name: cmap.get(r.category_id) ?? "" }));
+    const storeIds = [...new Set(rows.map((r) => r.store_id).filter(Boolean))];
+    const stores = storeIds.length ? await getDb().collection("stores").find({ id: { $in: storeIds } }).toArray() : [];
+    const smap = new Map(stores.map((s) => [s.id, s.name]));
+    return rows.map((r) => ({
+      ...r,
+      category_name: cmap.get(r.category_id) ?? "",
+      store_name: smap.get(r.store_id) ?? "",
+    }));
   }
 
   async listRecentIncome(storeId, dateStr, limit = 10) {
@@ -148,7 +155,11 @@ export class MongoIncomeExpenseRepository {
     if (!b) return [];
     const q = { income_date: b.key };
     if (Number(storeId) > 0) q.store_id = Number(storeId);
-    return getDb().collection("incomes").find(q).sort({ created_at: -1 }).limit(limit).toArray();
+    const rows = await getDb().collection("incomes").find(q).sort({ created_at: -1 }).limit(limit).toArray();
+    const storeIds = [...new Set(rows.map((r) => r.store_id).filter((x) => x != null))];
+    const stores = storeIds.length ? await getDb().collection("stores").find({ id: { $in: storeIds } }).toArray() : [];
+    const smap = new Map(stores.map((s) => [s.id, s.name]));
+    return rows.map((r) => ({ ...r, store_name: smap.get(r.store_id) ?? "" }));
   }
 
   async listExpensesPage({ storeId = 0, categoryId = 0, dateFrom, dateTo, page = 1, perPage = 50 } = {}) {

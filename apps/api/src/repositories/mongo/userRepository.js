@@ -303,8 +303,7 @@ export class MongoUserRepository {
     return [...list].sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
   }
 
-  async addShippingAddress(userId, body) {
-    const uid = Number(userId);
+  normalizeShippingAddress(body) {
     const full_name = String(body?.full_name ?? "").trim();
     const phone = String(body?.phone ?? "").trim();
     const address_line1 = String(body?.address_line1 ?? "").trim();
@@ -315,23 +314,72 @@ export class MongoUserRepository {
     if (!full_name || !phone || !address_line1 || !city || !state || !pincode) {
       return { ok: false, error: "validation_failed" };
     }
+    return {
+      ok: true,
+      value: {
+        full_name,
+        phone,
+        address_line1,
+        address_line2: address_line2 || "",
+        city,
+        state,
+        pincode,
+      },
+    };
+  }
+
+  async addShippingAddress(userId, body) {
+    const uid = Number(userId);
+    const normalized = this.normalizeShippingAddress(body);
+    if (!normalized.ok) return normalized;
     const id = await nextSeq("user_shipping_addresses");
+    const now = new Date();
     const row = {
       id,
-      full_name,
-      phone,
-      address_line1,
-      address_line2: address_line2 || "",
-      city,
-      state,
-      pincode,
-      created_at: new Date(),
+      ...normalized.value,
+      created_at: now,
+      updated_at: now,
     };
     await getDb().collection("users").updateOne(
       { id: uid },
       { $push: { shipping_addresses: row }, $set: { updated_at: new Date() } }
     );
     return { ok: true, address: row };
+  }
+
+  async updateShippingAddress(userId, addressId, body) {
+    const uid = Number(userId);
+    const aid = Number(addressId);
+    if (!Number.isFinite(aid) || aid <= 0) return { ok: false, error: "invalid_id" };
+    const normalized = this.normalizeShippingAddress(body);
+    if (!normalized.ok) return normalized;
+    const col = getDb().collection("users");
+    const existing = await col.findOne({ id: uid, "shipping_addresses.id": aid }, { projection: { shipping_addresses: 1 } });
+    if (!existing) return { ok: false, error: "not_found" };
+
+    const now = new Date();
+    await col.updateOne(
+      { id: uid },
+      {
+        $set: {
+          "shipping_addresses.$[addr].full_name": normalized.value.full_name,
+          "shipping_addresses.$[addr].phone": normalized.value.phone,
+          "shipping_addresses.$[addr].address_line1": normalized.value.address_line1,
+          "shipping_addresses.$[addr].address_line2": normalized.value.address_line2,
+          "shipping_addresses.$[addr].city": normalized.value.city,
+          "shipping_addresses.$[addr].state": normalized.value.state,
+          "shipping_addresses.$[addr].pincode": normalized.value.pincode,
+          "shipping_addresses.$[addr].updated_at": now,
+          updated_at: now,
+        },
+      },
+      { arrayFilters: [{ "addr.id": aid }] }
+    );
+
+    const list = await this.listShippingAddresses(uid);
+    const address = list.find((row) => Number(row.id) === aid) ?? null;
+    if (!address) return { ok: false, error: "not_found" };
+    return { ok: true, address };
   }
 
   async deleteShippingAddress(userId, addressId) {

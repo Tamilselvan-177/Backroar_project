@@ -21,6 +21,11 @@ function posAvailableEmbedded(p, variantId) {
   return Math.max(0, Math.floor(Number(p.stock_quantity) || 0));
 }
 
+function normalizeStoreId(raw) {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export class MongoStockTransferRepository {
   async countActiveStores() {
     return getDb().collection("stores").countDocuments({ is_active: { $in: [1, true] } });
@@ -51,15 +56,26 @@ export class MongoStockTransferRepository {
     const pid = Number(productId);
     const vid = variantId != null && !Number.isNaN(Number(variantId)) ? Number(variantId) : null;
     const stores = await this.countActiveStores();
+    const productShopId = normalizeStoreId(productDoc?.shop_id);
     if (vid != null) {
       const row = await this.getStoreVariantRow(sid, vid);
       if (row) return Math.max(0, Math.floor(Number(row.quantity) || 0));
-      if (stores <= 1 && productDoc) return posAvailableEmbedded(productDoc, vid);
+      if (productDoc) {
+        if (stores <= 1) return posAvailableEmbedded(productDoc, vid);
+        if (productShopId > 0 && productShopId === sid) return posAvailableEmbedded(productDoc, vid);
+        const anyVariantRow = await getDb().collection("variant_store_stock").findOne({ variant_id: vid });
+        if (!anyVariantRow && productShopId === 0) return posAvailableEmbedded(productDoc, vid);
+      }
       return 0;
     }
     const row = await this.getStoreProductRow(sid, pid);
     if (row) return Math.max(0, Math.floor(Number(row.quantity) || 0));
-    if (stores <= 1 && productDoc) return posAvailableEmbedded(productDoc, null);
+    if (productDoc) {
+      if (stores <= 1) return posAvailableEmbedded(productDoc, null);
+      if (productShopId > 0 && productShopId === sid) return posAvailableEmbedded(productDoc, null);
+      const anyProductRow = await getDb().collection("store_stock").findOne({ product_id: pid });
+      if (!anyProductRow && productShopId === 0) return posAvailableEmbedded(productDoc, null);
+    }
     return 0;
   }
 

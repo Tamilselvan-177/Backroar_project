@@ -12,7 +12,7 @@ import { normalizeProductListSort } from "../repositories/mongo/productRepositor
 import { csrfOk } from "../lib/csrf.js";
 import { wishlistProductBodySchema } from "../schemas/wishlist.js";
 import { reviewCreateBodySchema } from "../schemas/review.js";
-import { checkoutBodySchema } from "../schemas/checkout.js";
+import { checkoutBodySchema, checkoutCouponPreviewSchema } from "../schemas/checkout.js";
 import { mintAuthTokenPair, verifyRefreshJwt } from "../lib/jwtTokens.js";
 import {
   clearJwtAuthCookies,
@@ -413,6 +413,38 @@ export async function registerRoutes(app, { repos, authService, rbacService }) {
     return { ok: true, count: 0, totals: computeCartTotals([]) };
   });
 
+  app.post("/api/checkout/coupon-preview", async (req, reply) => {
+    const uid = requireUserId(req, reply);
+    if (uid == null) return;
+    if (!csrfOk(req)) return reply.code(403).send({ error: "csrf_failed" });
+    const parsed = checkoutCouponPreviewSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "validation_failed", details: parsed.error.flatten() });
+    }
+    const items = await repos.cart.getCartItems(uid);
+    if (!items.length) {
+      return reply.code(400).send({ error: "empty_cart", message: "Your cart is empty." });
+    }
+    const totals = computeCartTotals(items);
+    const quote = await repos.coupons.quoteForCheckout({
+      code: parsed.data.couponCode,
+      userId: uid,
+      subtotal: totals.subtotal,
+    });
+    if (!quote.ok) {
+      return reply.code(400).send({ error: quote.error, message: quote.message });
+    }
+    return {
+      ok: true,
+      coupon: quote.coupon,
+      totals: {
+        ...totals,
+        discount: Number(quote.discount_amount || 0),
+        total: Math.max(0, Number(totals.total || 0) - Number(quote.discount_amount || 0)),
+      },
+    };
+  });
+
   app.get("/api/wishlist", async (req, reply) => {
     const uid = requireUserId(req, reply);
     if (uid == null) return;
@@ -505,6 +537,22 @@ export async function registerRoutes(app, { repos, authService, rbacService }) {
     return { ok: true, address: r.address };
   });
 
+  app.patch("/api/me/addresses/:addressId", async (req, reply) => {
+    const uid = requireUserId(req, reply);
+    if (uid == null) return;
+    if (!csrfOk(req)) return reply.code(403).send({ error: "csrf_failed" });
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const r = await repos.users.updateShippingAddress(uid, req.params.addressId, body);
+    if (!r.ok) {
+      if (r.error === "invalid_id" || r.error === "validation_failed") {
+        return reply.code(400).send({ error: r.error });
+      }
+      if (r.error === "not_found") return reply.code(404).send({ error: r.error });
+      return reply.code(400).send({ error: r.error });
+    }
+    return { ok: true, address: r.address };
+  });
+
   app.delete("/api/me/addresses/:addressId", async (req, reply) => {
     const uid = requireUserId(req, reply);
     if (uid == null) return;
@@ -569,6 +617,9 @@ export async function registerRoutes(app, { repos, authService, rbacService }) {
       }
       if (r.error === "insufficient_stock") {
         return reply.code(409).send({ error: r.error, message: r.message });
+      }
+      if (String(r.error || "").startsWith("coupon_")) {
+        return reply.code(400).send({ error: r.error, message: r.message });
       }
       return reply.code(500).send({ error: "checkout_failed" });
     }

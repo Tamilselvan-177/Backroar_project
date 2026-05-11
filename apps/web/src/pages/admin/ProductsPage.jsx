@@ -444,7 +444,7 @@ export default function ProductsPage() {
               <th className="p-2">Category</th>
               <th className="p-2">Shop</th>
               <th className="p-2">Slug</th>
-              <th className="p-2">Price</th>
+              <th className="p-2">Pricing</th>
               <th className="p-2">Stock</th>
               <th className="p-2">Active</th>
               <th className="p-2">Featured</th>
@@ -454,6 +454,7 @@ export default function ProductsPage() {
           <tbody>
             {rows.map((p) => {
               const img = productImageUrl(p.image_path);
+              const hasNamedVariants = Array.isArray(p.variants) && p.variants.some((v) => String(v?.variant_name ?? "").trim());
               return (
                 <tr key={p.id} className="border-t">
                   <td className="p-2 w-14">
@@ -468,7 +469,16 @@ export default function ProductsPage() {
                   <td className="p-2 text-gray-600">{p.category_name ?? "—"}</td>
                   <td className="p-2 text-gray-600">{p.shop_name ?? (p.shop_id != null ? `#${p.shop_id}` : "—")}</td>
                   <td className="p-2 text-gray-600">{p.slug}</td>
-                  <td className="p-2">₹{p.price}</td>
+                  <td className="p-2">
+                    {hasNamedVariants ? (
+                      <div>
+                        <p className="font-medium text-gray-900">Variant pricing</p>
+                        <p className="text-xs text-gray-500">From ₹{p.price}</p>
+                      </div>
+                    ) : (
+                      `₹${p.price}`
+                    )}
+                  </td>
                   <td className="p-2">{p.stock_quantity}</td>
                   <td className="p-2">{p.is_active ? "Yes" : "No"}</td>
                   <td className="p-2">{p.is_featured ? "Yes" : "No"}</td>
