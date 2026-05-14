@@ -170,6 +170,11 @@ export default function StockTransferPage() {
           Move inventory between stores. With multiple stores, quantities follow per-store rows; with one active store the
           API falls back to embedded product or variant stock.
         </p>
+        <p className="mt-2">
+          <Link to="/admin/stock-transfer/history" className="text-sm text-[var(--brand-accent)] underline">
+            View transfer history
+          </Link>
+        </p>
       </div>
 
       {err && (

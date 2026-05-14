@@ -46,6 +46,7 @@ const nav = [
       { to: "/admin/pos/gst-report", label: "POS GST report", perm: P.FINANCE_POS_GST },
       { to: "/admin/pos/returns", label: "POS returns", perm: P.FINANCE_POS_RETURNS },
       { to: "/admin/stock-transfer", label: "Stock transfer", perm: P.ADMIN_STOCK },
+      { to: "/admin/stock-transfer/history", label: "Stock transfer history", perm: P.ADMIN_STOCK },
       { to: "/admin/stock-management", label: "Stock management", perm: P.ADMIN_STOCK },
       { to: "/admin/returns", label: "Returns", perm: P.ADMIN_RETURNS },
     ],

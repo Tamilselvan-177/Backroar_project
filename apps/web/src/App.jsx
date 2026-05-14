@@ -19,6 +19,7 @@ import Wishlist from "./pages/Wishlist.jsx";
 import Orders from "./pages/Orders.jsx";
 import OrderDetail from "./pages/OrderDetail.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 import PolicyPage from "./pages/PolicyPage.jsx";
 import AdminLayout from "./pages/admin/AdminLayout.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
@@ -65,6 +66,7 @@ import StaffEditorPage from "./pages/admin/staff/StaffEditorPage.jsx";
 import CouponsPage from "./pages/admin/coupons/CouponsPage.jsx";
 import CouponEditorPage from "./pages/admin/coupons/CouponEditorPage.jsx";
 import StockTransferPage from "./pages/admin/stock/StockTransferPage.jsx";
+import StockTransferHistoryPage from "./pages/admin/stock/StockTransferHistoryPage.jsx";
 import StockManagementListPage from "./pages/admin/stock/StockManagementListPage.jsx";
 import StockManagementProductPage from "./pages/admin/stock/StockManagementProductPage.jsx";
 import StockManagementAdjustPage from "./pages/admin/stock/StockManagementAdjustPage.jsx";
@@ -83,6 +85,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/account" element={<Account />} />
         <Route path="/account/profile" element={<AccountProfile />} />
         <Route path="/account/orders" element={<Orders />} />
@@ -440,6 +443,14 @@ export default function App() {
             element={
               <AdminPermRoute perm={P.ADMIN_STOCK}>
                 <StockTransferPage />
+              </AdminPermRoute>
+            }
+          />
+          <Route
+            path="stock-transfer/history"
+            element={
+              <AdminPermRoute perm={P.ADMIN_STOCK}>
+                <StockTransferHistoryPage />
               </AdminPermRoute>
             }
           />

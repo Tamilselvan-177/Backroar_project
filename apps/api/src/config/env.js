@@ -37,6 +37,7 @@ const envSchema = z
   /** Refresh JWT TTL (seconds); cookie Max-Age matches. */
   JWT_REFRESH_TTL_SEC: z.coerce.number().min(300).default(60 * 60 * 24 * 7),
   WEB_ORIGIN: z.string().min(1),
+  GOOGLE_CLIENT_ID: z.string().optional(),
   TRUST_PROXY: z.coerce.boolean().default(false),
   COOKIE_SECURE: z.coerce.boolean().optional(),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),

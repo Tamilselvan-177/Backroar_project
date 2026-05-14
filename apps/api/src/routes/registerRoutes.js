@@ -1,4 +1,10 @@
-import { loginBodySchema, registerBodySchema } from "../schemas/auth.js";
+import {
+  forgotPasswordBodySchema,
+  googleLoginBodySchema,
+  loginBodySchema,
+  registerBodySchema,
+  resetPasswordBodySchema,
+} from "../schemas/auth.js";
 import {
   cartAddBodySchema,
   cartBuyNowBodySchema,
@@ -177,6 +183,115 @@ export async function registerRoutes(app, { repos, authService, rbacService }) {
         ok: true,
         redirect: "/account",
         user: { id: userId, name, email, role: "customer" },
+        accessToken: tokens.access,
+        refreshToken: tokens.refresh,
+        expiresIn: env.JWT_ACCESS_TTL_SEC,
+      };
+    }
+  );
+
+  app.post(
+    "/api/auth/forgot-password",
+    {
+      config: {
+        rateLimit: { max: 10, timeWindow: "1 minute" },
+      },
+    },
+    async (req, reply) => {
+      await ensureGuestSession(req, reply);
+      if (!csrfOk(req)) {
+        return reply.code(403).send({ error: "csrf_failed" });
+      }
+      const parsed = forgotPasswordBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "validation_failed", details: parsed.error.flatten() });
+      }
+      const email = String(parsed.data.email).toLowerCase().trim();
+      const user = await repos.users.findByEmail(email);
+      let resetPreviewLink = null;
+      if (user?.id && user?.is_active) {
+        const token = authService.makePasswordResetToken();
+        const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
+        await repos.users.setPasswordResetToken(user.id, token.hash, expiresAt);
+        const base = (env.APP_URL || env.WEB_ORIGIN || "").replace(/\/+$/, "");
+        const resetPath = `/reset-password?token=${encodeURIComponent(token.raw)}`;
+        resetPreviewLink = `${base}${resetPath}`;
+        req.log.info({ userId: user.id, resetPath }, "password reset requested");
+      }
+      return {
+        ok: true,
+        message: "If that email exists, a password reset link has been generated.",
+        ...(env.NODE_ENV !== "production" && resetPreviewLink ? { reset_link: resetPreviewLink } : {}),
+      };
+    }
+  );
+
+  app.post(
+    "/api/auth/reset-password",
+    {
+      config: {
+        rateLimit: { max: 15, timeWindow: "1 minute" },
+      },
+    },
+    async (req, reply) => {
+      await ensureGuestSession(req, reply);
+      if (!csrfOk(req)) {
+        return reply.code(403).send({ error: "csrf_failed" });
+      }
+      const parsed = resetPasswordBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "validation_failed", details: parsed.error.flatten() });
+      }
+      const tokenHash = authService.hashPasswordResetToken(parsed.data.token);
+      const user = await repos.users.findByPasswordResetTokenHash(tokenHash);
+      if (!user?.id) {
+        return reply.code(400).send({ error: "token_invalid_or_expired" });
+      }
+      await authService.setPassword(user.id, parsed.data.password);
+      await repos.users.clearPasswordResetToken(user.id);
+      return { ok: true };
+    }
+  );
+
+  app.post(
+    "/api/auth/google",
+    {
+      config: {
+        rateLimit: { max: 30, timeWindow: "1 minute" },
+      },
+    },
+    async (req, reply) => {
+      await ensureGuestSession(req, reply);
+      if (!csrfOk(req)) {
+        return reply.code(403).send({ error: "csrf_failed" });
+      }
+      const parsed = googleLoginBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "validation_failed", details: parsed.error.flatten() });
+      }
+      let user = null;
+      try {
+        user = await authService.loginOrRegisterWithGoogle(parsed.data.id_token);
+      } catch (err) {
+        const msg = String(err?.message || "");
+        if (msg === "google_not_configured") return reply.code(503).send({ error: msg });
+        if (msg === "google_email_not_verified") return reply.code(400).send({ error: msg });
+        req.log.error({ err }, "google login failed");
+        return reply.code(400).send({ error: "google_token_invalid" });
+      }
+      if (!user) return reply.code(401).send({ error: "invalid_credentials" });
+      const store = req.server.sessionStore;
+      const csrf = store.generateCsrf();
+      await store.set(req.sessionId, { csrfToken: csrf });
+      req.sessionData = { csrfToken: csrf };
+      const tokens = await mintAuthTokenPair(user.id, user.role);
+      setJwtAuthCookies(reply, tokens);
+      await repos.users.updateLastLogin(user.id);
+      const redirect = user.role === "admin" || user.role === "staff" ? "/admin" : "/account";
+      return {
+        ok: true,
+        redirect,
+        user: { id: user.id, name: user.name, email: user.email, role: user.role },
         accessToken: tokens.access,
         refreshToken: tokens.refresh,
         expiresIn: env.JWT_ACCESS_TTL_SEC,

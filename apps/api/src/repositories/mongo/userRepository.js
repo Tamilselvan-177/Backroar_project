@@ -31,6 +31,13 @@ export class MongoUserRepository {
     return u ?? null;
   }
 
+  async findByGoogleSub(googleSub) {
+    const sub = String(googleSub ?? "").trim();
+    if (!sub) return null;
+    const u = await getDb().collection("users").findOne({ google_sub: sub });
+    return u ?? null;
+  }
+
   async findById(id) {
     const u = await getDb()
       .collection("users")
@@ -56,6 +63,7 @@ export class MongoUserRepository {
       email: input.email,
       phone: input.phone ?? null,
       password: input.passwordHash,
+      google_sub: input.googleSub ?? null,
       role,
       is_active: 1,
       shop_id: null,
@@ -64,6 +72,71 @@ export class MongoUserRepository {
       updated_at: now,
     });
     return id;
+  }
+
+  async linkGoogleIdentity(userId, googleSub) {
+    const uid = Number(userId);
+    const sub = String(googleSub ?? "").trim();
+    if (!uid || !sub) return;
+    await getDb().collection("users").updateOne(
+      { id: uid },
+      {
+        $set: {
+          google_sub: sub,
+          updated_at: new Date(),
+        },
+      }
+    );
+  }
+
+  async setPasswordResetToken(userId, tokenHash, expiresAt) {
+    await getDb().collection("users").updateOne(
+      { id: Number(userId) },
+      {
+        $set: {
+          reset_password_token_hash: String(tokenHash),
+          reset_password_expires_at: expiresAt,
+          updated_at: new Date(),
+        },
+      }
+    );
+  }
+
+  async clearPasswordResetToken(userId) {
+    await getDb().collection("users").updateOne(
+      { id: Number(userId) },
+      {
+        $set: {
+          reset_password_token_hash: null,
+          reset_password_expires_at: null,
+          updated_at: new Date(),
+        },
+      }
+    );
+  }
+
+  async findByPasswordResetTokenHash(tokenHash) {
+    const hash = String(tokenHash ?? "").trim();
+    if (!hash) return null;
+    const now = new Date();
+    const u = await getDb().collection("users").findOne({
+      reset_password_token_hash: hash,
+      reset_password_expires_at: { $gt: now },
+      is_active: { $in: [1, true] },
+    });
+    return u ?? null;
+  }
+
+  async updatePasswordHash(userId, passwordHash) {
+    await getDb().collection("users").updateOne(
+      { id: Number(userId) },
+      {
+        $set: {
+          password: String(passwordHash),
+          updated_at: new Date(),
+        },
+      }
+    );
   }
 
   async updateLastLogin(userId) {

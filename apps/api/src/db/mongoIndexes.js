@@ -13,6 +13,16 @@ export async function ensureAllIndexes() {
 
   await db.collection("users").createIndex({ id: 1 }, { unique: true });
   await db.collection("users").createIndex({ email: 1 }, { unique: true });
+  try {
+    await db.collection("users").createIndex({ google_sub: 1 }, { unique: true, sparse: true });
+  } catch {
+    /* duplicate google_sub or index mismatch */
+  }
+  try {
+    await db.collection("users").createIndex({ reset_password_token_hash: 1 }, { sparse: true });
+  } catch {
+    /* index mismatch */
+  }
 
   await db.collection("categories").createIndex({ id: 1 }, { unique: true });
   await db.collection("categories").createIndex({ slug: 1 }, { unique: true });

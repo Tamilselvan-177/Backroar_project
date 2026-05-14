@@ -177,6 +177,18 @@ function stripMongoDoc(doc) {
   return rest;
 }
 
+function mapProductWriteMongoError(err) {
+  const code = Number(err?.code);
+  const msg = String(err?.message ?? "");
+  if (code !== 11000 && !msg.includes("E11000")) return null;
+  if (msg.includes(" slug_1")) return { ok: false, error: "slug_taken" };
+  if (msg.includes(" sku_1")) return { ok: false, error: "sku_taken" };
+  if (msg.includes("variants.barcode_1") || msg.includes(" variants.barcode")) {
+    return { ok: false, error: "variant_barcode_taken" };
+  }
+  return { ok: false, error: "duplicate_key" };
+}
+
 async function loadBrandModelNames(db, brandId, modelId) {
   const bid = toNumOrNull(brandId);
   const mid = toNumOrNull(modelId);
@@ -1294,7 +1306,13 @@ export class MongoProductRepository {
       created_at: now,
       updated_at: now,
     };
-    await db.collection("products").insertOne(doc);
+    try {
+      await db.collection("products").insertOne(doc);
+    } catch (err) {
+      const mapped = mapProductWriteMongoError(err);
+      if (mapped) return mapped;
+      throw err;
+    }
     return { ok: true, id };
   }
 
@@ -1486,7 +1504,13 @@ export class MongoProductRepository {
     );
     $set.brand_name = names.brand_name;
     $set.model_name = names.model_name;
-    await col.updateOne({ id }, { $set });
+    try {
+      await col.updateOne({ id }, { $set });
+    } catch (err) {
+      const mapped = mapProductWriteMongoError(err);
+      if (mapped) return mapped;
+      throw err;
+    }
     await this.syncAggregatePricingFromVariants(id);
     return { ok: true, id };
   }

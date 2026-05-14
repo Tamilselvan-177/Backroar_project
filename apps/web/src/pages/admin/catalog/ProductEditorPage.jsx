@@ -184,6 +184,7 @@ export default function ProductEditorPage() {
   const [imageUploadMsg, setImageUploadMsg] = useState(null);
   const [imageUploadErr, setImageUploadErr] = useState(null);
   const [imageUploadBusy, setImageUploadBusy] = useState(false);
+  const [pendingImageUpload, setPendingImageUpload] = useState(null);
   const [labelQtyByVariant, setLabelQtyByVariant] = useState({});
   const [labelOddSlotByVariant, setLabelOddSlotByVariant] = useState({});
   const [compatBrandFilter, setCompatBrandFilter] = useState("all");
@@ -260,6 +261,52 @@ export default function ProductEditorPage() {
     imgs.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
     setGalleryPreview(imgs);
     setCompatModelsMode(Array.isArray(p.compatible_model_ids) && p.compatible_model_ids.length > 0);
+  }
+
+  function replaceGalleryPreviewFromProduct(p) {
+    const imgs = [...(p?.images || [])];
+    imgs.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+    setGalleryPreview(imgs);
+    const byVariantId = new Map(
+      (Array.isArray(p?.variants) ? p.variants : [])
+        .filter((v) => v?.id != null)
+        .map((v) => [Number(v.id), v.image_path ?? ""])
+    );
+    setVariants((list) =>
+      list.map((row) => {
+        const rid = row?.id != null ? Number(row.id) : NaN;
+        if (!Number.isFinite(rid) || rid <= 0 || !byVariantId.has(rid)) return row;
+        return { ...row, image_path: byVariantId.get(rid) ?? "" };
+      })
+    );
+  }
+
+  function closePendingImageUpload() {
+    setPendingImageUpload((prev) => {
+      if (prev?.preview_url) {
+        URL.revokeObjectURL(prev.preview_url);
+      }
+      return null;
+    });
+  }
+
+  function queueImageUpload(files, options = {}) {
+    const list = Array.isArray(files) ? files : Array.from(files || []);
+    if (!list.length) return;
+    const first = list[0];
+    const preview_url = first?.type?.startsWith?.("image/") ? URL.createObjectURL(first) : null;
+    const variantIdx = options.variantIdx ?? null;
+    const row =
+      Number.isFinite(Number(variantIdx)) && Number(variantIdx) >= 0 ? variants[Number(variantIdx)] : null;
+    setPendingImageUpload({
+      mode: options.mode === "variant" ? "variant" : "gallery",
+      variant_idx: variantIdx,
+      variant_name: row?.variant_name != null ? String(row.variant_name) : "",
+      variant_id: row?.id != null && row.id !== "" ? Number(row.id) : null,
+      variants_snapshot: variants.map((v) => ({ ...v })),
+      files: list,
+      preview_url,
+    });
   }
 
   const loadMeta = useCallback(async () => {
@@ -370,6 +417,15 @@ export default function ProductEditorPage() {
       .catch((e) => setLoadErr(e.body?.error || e.message))
       .finally(() => setDetailLoading(false));
   }, [id, isCreate]);
+
+  useEffect(
+    () => () => {
+      if (pendingImageUpload?.preview_url) {
+        URL.revokeObjectURL(pendingImageUpload.preview_url);
+      }
+    },
+    [pendingImageUpload?.preview_url]
+  );
 
   useEffect(() => {
     if (isCreate) return;
@@ -504,7 +560,7 @@ export default function ProductEditorPage() {
     setImageUploadErr(null);
     try {
       const d = await apiJson(`/api/admin/products/${encodeURIComponent(id)}`);
-      applyLoadedProduct(d.product);
+      replaceGalleryPreviewFromProduct(d.product);
     } catch (e) {
       setImageUploadErr(e.body?.error || e.message);
     }
@@ -513,27 +569,8 @@ export default function ProductEditorPage() {
   async function handleGalleryFiles(e) {
     const files = e.target.files;
     if (!files?.length || isCreate || !id) return;
-    setImageUploadBusy(true);
-    setImageUploadErr(null);
-    setImageUploadMsg(null);
-    try {
-      const res = await apiUploadProductImages(Number(id), files, {});
-      const n = (Array.isArray(res.urls) && res.urls.length) || files.length;
-      const refreshed = await apiJson(`/api/admin/products/${encodeURIComponent(id)}`);
-      applyLoadedProduct(refreshed.product);
-      setImageUploadMsg(`Uploaded ${n} image(s).`);
-      e.target.value = "";
-    } catch (err) {
-      const b = err.body;
-      setImageUploadErr(
-        b?.message ||
-          (b?.error === "cloudinary_not_configured"
-            ? "Cloudinary is not configured on the API."
-            : err.message)
-      );
-    } finally {
-      setImageUploadBusy(false);
-    }
+    queueImageUpload(files, { mode: "gallery" });
+    e.target.value = "";
   }
 
   async function handleVariantImageFile(variantIdx, e) {
@@ -545,13 +582,44 @@ export default function ProductEditorPage() {
       e.target.value = "";
       return;
     }
+    queueImageUpload([file], { mode: "variant", variantIdx });
+    e.target.value = "";
+  }
+
+  async function confirmPendingImageUpload() {
+    const pending = pendingImageUpload;
+    if (!pending) return;
     setImageUploadBusy(true);
     setImageUploadErr(null);
     setImageUploadMsg(null);
     try {
+      if (pending.mode === "gallery") {
+        if (isCreate || !id) {
+          setImageUploadErr("Save the product first, then upload gallery images.");
+          return;
+        }
+        const res = await apiUploadProductImages(Number(id), pending.files, {});
+        const n = (Array.isArray(res.urls) && res.urls.length) || pending.files.length;
+        const refreshed = await apiJson(`/api/admin/products/${encodeURIComponent(id)}`);
+        replaceGalleryPreviewFromProduct(refreshed.product);
+        setImageUploadMsg(`Uploaded ${n} image(s).`);
+        closePendingImageUpload();
+        return;
+      }
+
+      const variantIdx = Number(pending.variant_idx);
+      const file = pending.files?.[0];
+      if (!Number.isFinite(variantIdx) || !file) return;
+      const variantName = String(
+        pending.variant_name ?? variants[variantIdx]?.variant_name ?? ""
+      ).trim();
+      if (!variantName) {
+        setImageUploadErr("Enter a variant name, then confirm upload.");
+        return;
+      }
+
       const existingPid = id != null && String(id).trim() !== "" ? Number(id) : NaN;
       const hasProductId = Number.isFinite(existingPid) && existingPid > 0;
-
       let productId = hasProductId ? existingPid : null;
       let savedProduct = null;
 
@@ -572,9 +640,11 @@ export default function ProductEditorPage() {
       }
 
       let variantId =
-        variants[variantIdx]?.id != null && variants[variantIdx].id !== ""
-          ? Number(variants[variantIdx].id)
-          : null;
+        pending.variant_id != null && Number.isFinite(Number(pending.variant_id)) && Number(pending.variant_id) > 0
+          ? Number(pending.variant_id)
+          : variants[variantIdx]?.id != null && variants[variantIdx].id !== ""
+            ? Number(variants[variantIdx].id)
+            : null;
       if (variantId == null || Number.isNaN(variantId) || variantId <= 0) {
         if (!savedProduct) {
           const payload = buildPayload();
@@ -586,26 +656,40 @@ export default function ProductEditorPage() {
             throw new Error("Save failed — cannot upload variant image yet.");
           }
           savedProduct = resp.product;
-          applyLoadedProduct(resp.product);
         }
-        variantId = resolveVariantIdFromSavedProduct(savedProduct, variants, variantIdx, variantName);
+        variantId = resolveVariantIdFromSavedProduct(
+          savedProduct,
+          Array.isArray(pending.variants_snapshot) ? pending.variants_snapshot : variants,
+          variantIdx,
+          variantName
+        );
       }
 
       if (variantId == null || Number.isNaN(variantId) || variantId <= 0) {
         setImageUploadErr(
           'Could not resolve this variant after save. Click “Refresh gallery” or save again, then retry.'
         );
-        e.target.value = "";
         return;
       }
-      await apiUploadProductImages(Number(productId), [file], { variantId });
+      const up = await apiUploadProductImages(Number(productId), [file], { variantId });
+      const uploadedUrl = Array.isArray(up?.urls) ? up.urls[0] : null;
+      setVariant(variantIdx, {
+        id: variantId,
+        image_path: uploadedUrl || variants[variantIdx]?.image_path || "",
+      });
       const refreshed = await apiJson(`/api/admin/products/${encodeURIComponent(productId)}`);
-      applyLoadedProduct(refreshed.product);
+      replaceGalleryPreviewFromProduct(refreshed.product);
       setImageUploadMsg("Variant image uploaded.");
-      e.target.value = "";
+      closePendingImageUpload();
     } catch (err) {
       const b = err.body;
-      setImageUploadErr(b?.message || b?.error || err.message);
+      setImageUploadErr(
+        (b?.field ? `${b.error}: ${b.field}` : null) ||
+          b?.message ||
+          (b?.error === "cloudinary_not_configured"
+            ? "Cloudinary is not configured on the API."
+            : b?.error || err.message)
+      );
     } finally {
       setImageUploadBusy(false);
     }
@@ -1670,25 +1754,18 @@ export default function ProductEditorPage() {
                 <div className="block text-xs text-slate-600">
                   <span className="block font-medium text-slate-700">Variant image file</span>
                   <p className="mt-0.5 text-[11px] text-slate-500 leading-snug">
-                    Enter a variant name first. If the product is not saved yet, it is created automatically when you pick a file,
-                    then the image uploads. Existing products save variant rows automatically before upload when needed.
+                    Enter a variant name first. You will see preview first, then confirm upload. If this product is not saved yet,
+                    it is created automatically during confirm.
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <label
-                      className={`inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm ${
-                        imageUploadBusy ? "cursor-not-allowed opacity-45" : "cursor-pointer hover:bg-slate-50"
-                      }`}
-                    >
-                      <input
-                        type="file"
-                        accept="image/*"
-                        disabled={imageUploadBusy}
-                        className="sr-only"
-                        aria-label={`Choose variant ${i + 1} image file`}
-                        onChange={(e) => handleVariantImageFile(i, e)}
-                      />
-                      Choose image…
-                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={imageUploadBusy}
+                      className="block w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-black disabled:opacity-50"
+                      aria-label={`Choose variant ${i + 1} image file`}
+                      onChange={(e) => handleVariantImageFile(i, e)}
+                    />
                   </div>
                   {variantUploadRows.length > 0 ? (
                     <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/50 p-3">
@@ -1901,6 +1978,52 @@ export default function ProductEditorPage() {
           ) : null}
         </div>
       </form>
+      {pendingImageUpload ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-900">Confirm image upload</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              {pendingImageUpload.mode === "variant"
+                ? "This image will be uploaded to the selected variant."
+                : "This image will be uploaded to product gallery."}
+            </p>
+            {pendingImageUpload.preview_url ? (
+              <img
+                src={pendingImageUpload.preview_url}
+                alt="Upload preview"
+                className="mt-3 h-52 w-full rounded-xl border border-slate-200 object-cover"
+              />
+            ) : (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                {pendingImageUpload.files[0]?.name || "Selected file"}
+              </div>
+            )}
+            {pendingImageUpload.files.length > 1 ? (
+              <p className="mt-2 text-xs text-slate-500">
+                +{pendingImageUpload.files.length - 1} more file(s) selected.
+              </p>
+            ) : null}
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={closePendingImageUpload}
+                disabled={imageUploadBusy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50"
+                onClick={confirmPendingImageUpload}
+                disabled={imageUploadBusy}
+              >
+                {imageUploadBusy ? "Uploading…" : "Confirm upload"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <CatalogQuickCreateModals
         active={quickAdd}
         onClose={() => setQuickAdd(null)}

@@ -286,4 +286,83 @@ export class MongoStockTransferRepository {
       quantity: Math.floor(Number(qty) || 0),
     });
   }
+
+  async listTransfersPage({ sourceStoreId = 0, destStoreId = 0, dateFrom = "", dateTo = "", page = 1, perPage = 20 } = {}) {
+    const q = {};
+    if (Number(sourceStoreId) > 0) q.source_store_id = Number(sourceStoreId);
+    if (Number(destStoreId) > 0) q.dest_store_id = Number(destStoreId);
+    const df = String(dateFrom || "").slice(0, 10);
+    const dt = String(dateTo || "").slice(0, 10);
+    if (df || dt) {
+      q.created_at = {};
+      if (df) q.created_at.$gte = new Date(`${df}T00:00:00.000Z`);
+      if (dt) q.created_at.$lte = new Date(`${dt}T23:59:59.999Z`);
+    }
+    const lim = Math.min(100, Math.max(1, Math.floor(Number(perPage) || 20)));
+    const pg = Math.max(1, Math.floor(Number(page) || 1));
+    const db = getDb();
+    const col = db.collection("stock_transfers");
+    const [total, rows] = await Promise.all([
+      col.countDocuments(q),
+      col.find(q).sort({ created_at: -1, id: -1 }).skip((pg - 1) * lim).limit(lim).toArray(),
+    ]);
+    const storeIds = [...new Set(rows.flatMap((r) => [r.source_store_id, r.dest_store_id]).filter(Boolean))];
+    const userIds = [...new Set(rows.map((r) => Number(r.initiated_by)).filter(Boolean))];
+    const [stores, users] = await Promise.all([
+      storeIds.length ? db.collection("stores").find({ id: { $in: storeIds } }).toArray() : [],
+      userIds.length ? db.collection("users").find({ id: { $in: userIds } }).toArray() : [],
+    ]);
+    const smap = new Map(stores.map((s) => [s.id, s.name]));
+    const umap = new Map(users.map((u) => [u.id, u.name || u.email || `User #${u.id}`]));
+    return {
+      transfers: rows.map((r) => ({
+        ...r,
+        source_store_name: smap.get(r.source_store_id) ?? "",
+        dest_store_name: smap.get(r.dest_store_id) ?? "",
+        initiated_by_name: umap.get(Number(r.initiated_by)) ?? "",
+      })),
+      total,
+      page: pg,
+      per_page: lim,
+      total_pages: Math.max(1, Math.ceil(total / lim)),
+    };
+  }
+
+  async findTransferWithItems(transferId) {
+    const id = Number(transferId);
+    if (!id) return null;
+    const db = getDb();
+    const transfer = await db.collection("stock_transfers").findOne({ id });
+    if (!transfer) return null;
+    const items = await db.collection("stock_transfer_items").find({ transfer_id: id }).sort({ id: 1 }).toArray();
+    const productIds = [...new Set(items.map((x) => Number(x.product_id)).filter(Boolean))];
+    const products = productIds.length ? await db.collection("products").find({ id: { $in: productIds } }).toArray() : [];
+    const pmap = new Map(products.map((p) => [p.id, p]));
+    const stores = await db
+      .collection("stores")
+      .find({ id: { $in: [Number(transfer.source_store_id), Number(transfer.dest_store_id)].filter(Boolean) } })
+      .toArray();
+    const smap = new Map(stores.map((s) => [s.id, s.name]));
+    const user = transfer.initiated_by ? await db.collection("users").findOne({ id: Number(transfer.initiated_by) }) : null;
+    return {
+      ...transfer,
+      source_store_name: smap.get(transfer.source_store_id) ?? "",
+      dest_store_name: smap.get(transfer.dest_store_id) ?? "",
+      initiated_by_name: user?.name || user?.email || "",
+      items: items.map((line) => {
+        const p = pmap.get(Number(line.product_id));
+        let variant_name = "";
+        if (line.variant_id != null && Array.isArray(p?.variants)) {
+          const v = p.variants.find((x) => Number(x.id) === Number(line.variant_id));
+          variant_name = String(v?.variant_name || "").trim();
+        }
+        return {
+          ...line,
+          product_name: p?.name ?? `#${line.product_id}`,
+          variant_name,
+          sku: p?.sku ?? "",
+        };
+      }),
+    };
+  }
 }

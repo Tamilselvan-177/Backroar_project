@@ -18,3 +18,22 @@ export const registerBodySchema = z
     message: "Passwords do not match",
     path: ["confirm_password"],
   });
+
+export const forgotPasswordBodySchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordBodySchema = z
+  .object({
+    token: z.string().min(16),
+    password: z.string().min(6),
+    confirm_password: z.string(),
+  })
+  .refine((d) => d.password === d.confirm_password, {
+    message: "Passwords do not match",
+    path: ["confirm_password"],
+  });
+
+export const googleLoginBodySchema = z.object({
+  id_token: z.string().min(20),
+});

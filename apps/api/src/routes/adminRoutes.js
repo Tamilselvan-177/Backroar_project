@@ -922,6 +922,25 @@ export async function registerAdminRoutes(app, { repos, rbacService }) {
     return { ok: true, transfer_number: tr.transfer_number };
   });
 
+  app.get("/api/admin/stock-transfer/history", async (req, reply) => {
+    if ((await requireStaffWithPermission(req, reply, rbacService, PERM.ADMIN_STOCK)) == null) return;
+    return repos.stockTransfer.listTransfersPage({
+      sourceStoreId: req.query.source_store_id,
+      destStoreId: req.query.dest_store_id,
+      dateFrom: req.query.date_from,
+      dateTo: req.query.date_to,
+      page: req.query.page,
+      perPage: req.query.per_page,
+    });
+  });
+
+  app.get("/api/admin/stock-transfer/history/:id", async (req, reply) => {
+    if ((await requireStaffWithPermission(req, reply, rbacService, PERM.ADMIN_STOCK)) == null) return;
+    const row = await repos.stockTransfer.findTransferWithItems(req.params.id);
+    if (!row) return reply.code(404).send({ error: "not_found" });
+    return row;
+  });
+
   /* ---------- Stock management (admin/staff) ---------- */
   app.get("/api/admin/stock-management/inventory", async (req, reply) => {
     if ((await requireStaffWithPermission(req, reply, rbacService, PERM.ADMIN_STOCK)) == null) return;
@@ -1310,7 +1329,7 @@ export async function registerAdminRoutes(app, { repos, rbacService }) {
       if (r.error === "validation_failed") {
         return reply.code(400).send({ error: r.error, field: r.field });
       }
-      if (r.error === "sku_taken") return reply.code(409).send({ error: r.error });
+      if (r.error === "sku_taken" || r.error === "slug_taken") return reply.code(409).send({ error: r.error });
       if (
         r.error === "variant_barcode_taken" ||
         r.error === "duplicate_variant_barcode" ||
